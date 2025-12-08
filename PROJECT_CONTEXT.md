@@ -669,6 +669,26 @@ Sistema de gerenciamento logístico que permite visualizar dados através de um 
   - Build executado com sucesso (817.52 KB)
   - Sistema de importação totalmente funcional
 
+### 2025-12-08 - Remoção da Limitação de 1000 Registros por Importação
+- **Modificações**:
+  - Removida validação que limitava importações a máximo de 1000 registros
+  - Sistema agora permite importar arquivos CSV de qualquer tamanho
+  - Função `analyzeImportData` não verifica mais o tamanho do array
+
+- **Arquivos Afetados**:
+  - `services/supabaseService.ts`:
+    - Linhas 442-445: Removido bloco de validação de limite
+    - Função agora processa qualquer quantidade de registros
+
+- **Motivo**: Usuário solicitou remoção da limitação para poder importar arquivos maiores
+
+- **Status**: Concluído ✅
+
+- **Resultado**:
+  - Sistema aceita importações de qualquer tamanho
+  - Build executado com sucesso (817.41 KB)
+  - Sem limitações artificiais no sistema de importação
+
 ## Sessão de Chat Atual
 
 ### Solicitação do Usuário

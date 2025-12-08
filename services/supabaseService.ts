@@ -439,11 +439,6 @@ export const upsertTickets = async (tickets: Ticket[]) => {
 export const analyzeImportData = async (ticketsFromCsv: Ticket[]): Promise<ImportAnalysis> => {
   if (!supabase) throw new Error("Supabase client not initialized");
 
-  // Validar limite de registros
-  if (ticketsFromCsv.length > 1000) {
-    throw new Error('Máximo de 1000 registros por importação. Por favor, divida seu arquivo.');
-  }
-
   const ticketIds = ticketsFromCsv.map(t => t.ticket_id).filter(Boolean);
   const spxtns = ticketsFromCsv.map(t => t.spxtn).filter(Boolean);
 
