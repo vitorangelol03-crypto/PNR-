@@ -4,9 +4,10 @@ import { Database, Key } from 'lucide-react';
 
 interface Props {
   onConnect: (config: SupabaseConfig) => void;
+  error?: string | null;
 }
 
-export const ConnectionModal: React.FC<Props> = ({ onConnect }) => {
+export const ConnectionModal: React.FC<Props> = ({ onConnect, error }) => {
   const [url, setUrl] = useState('');
   const [key, setKey] = useState('');
   
@@ -38,6 +39,12 @@ export const ConnectionModal: React.FC<Props> = ({ onConnect }) => {
           <h2 className="text-2xl font-bold text-gray-800">Conectar Base de Dados</h2>
           <p className="text-gray-500 mt-2">Insira as credenciais do seu projeto Supabase.</p>
         </div>
+
+        {error && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-sm text-red-700">{error}</p>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>

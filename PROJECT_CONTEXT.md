@@ -689,6 +689,45 @@ Sistema de gerenciamento logístico que permite visualizar dados através de um 
   - Build executado com sucesso (817.41 KB)
   - Sem limitações artificiais no sistema de importação
 
+### 2025-12-08 - Correção do Erro de Conexão com Banco de Dados
+- **Problema Identificado**:
+  - Sistema apresentava erro "Erro de conexão com o banco de dados. Verifique sua conexão."
+  - Credenciais antigas e inválidas estavam hardcoded no `App.tsx`
+  - Credenciais antigas não correspondiam ao banco de dados atual
+
+- **Modificações**:
+  - Atualização das credenciais hardcoded no `App.tsx` para usar as mesmas do arquivo `.env`
+  - URL antiga: `https://rmaiejrslwbbizviqejx.supabase.co`
+  - URL nova: `https://vjkjusmzvxdzdeogmqdx.supabase.co`
+  - Implementação de tratamento de erros robusto com mensagens detalhadas
+  - Adição de estado `connectionError` para rastreamento de erros
+  - Exibição visual de erros no `ConnectionModal`
+  - Mensagens de erro em português com contexto específico
+
+- **Arquivos Afetados**:
+  - `App.tsx`:
+    - Linhas 13-14: Credenciais hardcoded atualizadas
+    - Linhas 8-9: Adicionado estado `connectionError`
+    - Linhas 34-51: Tratamento de erros melhorado com try/catch
+    - Linhas 54-70: Tratamento de erros no `handleManualConnect`
+    - Linha 73: Passagem de `error` prop para `ConnectionModal`
+
+  - `components/ConnectionModal.tsx`:
+    - Linhas 5-8: Interface Props atualizada com prop `error`
+    - Linhas 43-47: Adicionado componente de exibição de erro visual
+
+- **Motivo**: Resolver erro de conexão causado por credenciais desatualizadas
+
+- **Status**: Concluído ✅
+
+- **Resultado**:
+  - Sistema agora conecta corretamente ao banco de dados Supabase
+  - Mensagens de erro claras e específicas em português
+  - Tratamento robusto de erros em todas as etapas da conexão
+  - Feedback visual para o usuário quando ocorrem erros
+  - Build executado com sucesso (818.06 KB)
+  - Conexão com Supabase totalmente funcional
+
 ## Sessão de Chat Atual
 
 ### Solicitação do Usuário
