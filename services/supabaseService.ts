@@ -21,7 +21,6 @@ export interface ColumnFilters {
   driver?: string;
   value?: string;
   status?: string;
-  deadline?: string;
   internal?: string;
   notes?: string;
 }
@@ -118,10 +117,6 @@ export const fetchTicketsPaginated = async ({
        }
     }
 
-    if (filters.deadline) {
-      query = query.ilike('sla_deadline', `%${filters.deadline}%`);
-    }
-    
     if (filters.internal && filters.internal !== '') {
       query = query.eq('internal_status', filters.internal);
     }

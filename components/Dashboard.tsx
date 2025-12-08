@@ -78,7 +78,6 @@ export const Dashboard: React.FC = () => {
     driver: '',
     value: '',
     status: '',
-    deadline: '',
     internal: '',
     notes: ''
   });
@@ -444,13 +443,7 @@ export const Dashboard: React.FC = () => {
                      </select>
                    </td>
                    <td className="px-2 py-2">
-                     <input 
-                       type="text" 
-                       placeholder="Data"
-                       className="w-full text-xs px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 outline-none"
-                       value={colFilters.deadline}
-                       onChange={(e) => handleColFilterChange('deadline', e.target.value)}
-                     />
+                     {/* Campo de filtro removido - apenas exibição de data */}
                    </td>
                    <td className="px-2 py-2">
                      <select 

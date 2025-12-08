@@ -69,6 +69,20 @@ Sistema de gerenciamento logístico que permite visualizar dados através de um 
 - **Status**: Concluído
 - **Resultado**: Build executado com sucesso, projeto pronto para desenvolvimento
 
+### 2025-12-08 - Remoção do Filtro de Prazo
+- **Modificações**:
+  - Removido campo de filtro/pesquisa na coluna "Prazo" do Dashboard
+  - Coluna de prazo mantida visível na tabela
+  - Removida lógica de filtro por deadline no serviço Supabase
+  - Removida propriedade `deadline` da interface `ColumnFilters`
+  - Removida propriedade `deadline` do estado `colFilters` no Dashboard
+- **Arquivos Afetados**:
+  - `components/Dashboard.tsx`: Substituído input de filtro por célula vazia (linha 446-448)
+  - `services/supabaseService.ts`: Removida lógica de filtro deadline e propriedade da interface
+- **Motivo**: Campo de filtro por prazo não será utilizado, mas a visualização da data continua necessária
+- **Status**: Concluído
+- **Resultado**: Filtro removido, coluna de prazo continua visível com datas e alertas de atraso funcionando
+
 ## Decisões Técnicas
 
 ### 2025-12-08 - Estrutura de Arquivos Duplicada (RESOLVIDO)
