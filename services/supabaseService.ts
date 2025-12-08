@@ -439,27 +439,62 @@ export const upsertTickets = async (tickets: Ticket[]) => {
 export const analyzeImportData = async (ticketsFromCsv: Ticket[]): Promise<ImportAnalysis> => {
   if (!supabase) throw new Error("Supabase client not initialized");
 
+  // Validar limite de registros
+  if (ticketsFromCsv.length > 1000) {
+    throw new Error('Máximo de 1000 registros por importação. Por favor, divida seu arquivo.');
+  }
+
   const ticketIds = ticketsFromCsv.map(t => t.ticket_id).filter(Boolean);
   const spxtns = ticketsFromCsv.map(t => t.spxtn).filter(Boolean);
 
-  const conditions: string[] = [];
-  if (ticketIds.length > 0) {
-    conditions.push(`ticket_id.in.(${ticketIds.join(',')})`);
-  }
-  if (spxtns.length > 0) {
-    conditions.push(`spxtn.in.(${spxtns.join(',')})`);
+  // Validar que temos IDs para buscar
+  if (ticketIds.length === 0 && spxtns.length === 0) {
+    return {
+      previews: ticketsFromCsv.map(t => ({
+        ticket: t,
+        operation: 'skip',
+        changes: [],
+        error: 'Ticket ID não encontrado'
+      })),
+      summary: {
+        total: ticketsFromCsv.length,
+        toCreate: 0,
+        toUpdate: 0,
+        toSkip: ticketsFromCsv.length
+      }
+    };
   }
 
   let existingTickets: Ticket[] = [];
 
-  if (conditions.length > 0) {
+  // Buscar por ticket_ids
+  if (ticketIds.length > 0) {
     const { data, error } = await supabase
       .from('tickets')
       .select('*')
-      .or(conditions.join(','));
+      .in('ticket_id', ticketIds);
 
     if (error) throw error;
     existingTickets = (data as Ticket[]) || [];
+  }
+
+  // Buscar por spxtns (se houver)
+  if (spxtns.length > 0) {
+    const { data, error } = await supabase
+      .from('tickets')
+      .select('*')
+      .in('spxtn', spxtns);
+
+    if (error) throw error;
+
+    // Combinar resultados e remover duplicados
+    const spxtnTickets = (data as Ticket[]) || [];
+    const existingIds = new Set(existingTickets.map(t => t.id));
+    spxtnTickets.forEach(ticket => {
+      if (ticket.id && !existingIds.has(ticket.id)) {
+        existingTickets.push(ticket);
+      }
+    });
   }
 
   const existingMap = new Map<string, Ticket>();

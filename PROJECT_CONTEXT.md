@@ -612,6 +612,63 @@ Sistema de gerenciamento logístico que permite visualizar dados através de um 
   - Todas as mudanças visíveis antes da confirmação
   - Sistema pronto para produção
 
+### 2025-12-08 - Correção Crítica: Erro "Failed to fetch" na Importação CSV
+- **Modificações**:
+  1. **Correção da Query Supabase em analyzeImportData**:
+     - Problema: Sintaxe incorreta `.or(conditions.join(','))` com múltiplas condições `.in()`
+     - Causa: Supabase não suporta sintaxe `.or('ticket_id.in.(1,2,3),spxtn.in.(A,B,C)')`
+     - Solução: Dividida em duas queries separadas usando `.in()` corretamente
+     - Nova lógica:
+       - Query 1: Busca por ticket_ids usando `.in('ticket_id', ticketIds)`
+       - Query 2: Busca por spxtns usando `.in('spxtn', spxtns)`
+       - Combina resultados removendo duplicados por ID interno
+     - Adicionada validação: retorna erro claro se não houver IDs para buscar
+     - Adicionado limite de segurança: máximo 1000 registros por importação
+
+  2. **Melhorias no Tratamento de Erros**:
+     - Adicionado console.error para debug do erro completo
+     - Mensagens de erro mais específicas e amigáveis
+     - Detecção de erro de fetch: "Erro de conexão com o banco de dados"
+     - Fallback para mensagens genéricas quando erro é desconhecido
+
+  3. **Validações Adicionadas**:
+     - Validação de limite: máximo 1000 registros por importação
+     - Mensagem clara pedindo para dividir arquivo se exceder
+     - Validação de IDs vazios antes de tentar buscar no banco
+     - Retorno antecipado com feedback claro em caso de dados inválidos
+
+- **Arquivos Afetados**:
+  - `services/supabaseService.ts`:
+    - Linhas 439-493: Função `analyzeImportData` completamente refatorada
+    - Substituída sintaxe `.or()` por duas queries `.in()` separadas
+    - Adicionada lógica de combinação e deduplicação de resultados
+    - Adicionadas validações de limite e IDs vazios
+  - `components/ImportModal.tsx`:
+    - Linhas 89-102: Melhorado bloco catch com mensagens específicas
+    - Adicionado log detalhado de erros no console
+    - Mensagens de erro mais amigáveis para o usuário
+
+- **Problema Original**:
+  - Erro: "TypeError: Failed to fetch"
+  - Ocorria ao tentar carregar arquivo CSV no modal de importação
+  - Query mal formada causava erro 400 no Supabase
+  - Sistema não conseguia analisar duplicados
+
+- **Motivo**:
+  - Corrigir erro crítico que impedia completamente a importação de dados CSV
+  - Query Supabase estava com sintaxe inválida gerando erro de rede
+  - Necessário usar sintaxe correta do Supabase para filtros múltiplos
+
+- **Status**: Concluído ✅
+
+- **Resultado**:
+  - Importação CSV agora funciona corretamente
+  - Queries Supabase usando sintaxe válida (.in() separados)
+  - Mensagens de erro claras e específicas
+  - Validações de limite implementadas (máx 1000 registros)
+  - Build executado com sucesso (817.52 KB)
+  - Sistema de importação totalmente funcional
+
 ## Sessão de Chat Atual
 
 ### Solicitação do Usuário

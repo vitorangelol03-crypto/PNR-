@@ -87,7 +87,17 @@ export const ImportModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) => 
           setAnalysis(analysisResult);
           setStep('preview');
         } catch (err: any) {
-          setError(err.message || "Falha ao analisar arquivo");
+          console.error('Erro ao analisar importação:', err);
+
+          let errorMessage = "Falha ao analisar arquivo";
+
+          if (err.message?.includes('fetch')) {
+            errorMessage = "Erro de conexão com o banco de dados. Verifique sua conexão.";
+          } else if (err.message) {
+            errorMessage = err.message;
+          }
+
+          setError(errorMessage);
           setStep('upload');
         } finally {
           setLoading(false);
