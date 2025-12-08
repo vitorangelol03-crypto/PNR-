@@ -67,7 +67,11 @@ export const Dashboard: React.FC = () => {
   const [page, setPage] = useState(1);
   const [pageSize] = useState(50);
   const [totalCount, setTotalCount] = useState(0);
-  
+
+  // Date Filter States
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
   // Global Search
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -107,7 +111,7 @@ export const Dashboard: React.FC = () => {
   const loadStats = async () => {
     try {
       const [stats, drivers] = await Promise.all([
-        fetchDashboardStats(),
+        fetchDashboardStats(startDate, endDate),
         fetchUniqueDrivers()
       ]);
       setKpis(stats.kpis);
@@ -179,6 +183,12 @@ export const Dashboard: React.FC = () => {
     if (!supabase) return;
     loadStats();
   }, [supabase]);
+
+  // Reload stats when date filters change
+  useEffect(() => {
+    if (!supabase) return;
+    loadStats();
+  }, [startDate, endDate]);
 
   // Effect trigger for table data
   useEffect(() => {
@@ -285,6 +295,46 @@ export const Dashboard: React.FC = () => {
             <p className="text-sm font-medium">{errorMsg}</p>
           </div>
         )}
+
+        {/* Date Filter Section */}
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4 text-gray-500" />
+              <span className="text-sm font-medium text-gray-700">Filtrar por Período:</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-gray-600">Data Inicial:</label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-gray-600">Data Final:</label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            {(startDate || endDate) && (
+              <button
+                onClick={() => {
+                  setStartDate('');
+                  setEndDate('');
+                }}
+                className="flex items-center gap-1 text-xs text-red-600 hover:text-red-700 font-medium transition"
+              >
+                <X className="w-3 h-3" />
+                Limpar Filtros
+              </button>
+            )}
+          </div>
+        </div>
 
         {/* KPIs Section */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

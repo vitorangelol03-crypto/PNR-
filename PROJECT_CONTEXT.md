@@ -83,6 +83,28 @@ Sistema de gerenciamento logístico que permite visualizar dados através de um 
 - **Status**: Concluído
 - **Resultado**: Filtro removido, coluna de prazo continua visível com datas e alertas de atraso funcionando
 
+### 2025-12-08 - Implementação de Filtros de Data no Dashboard
+- **Modificações**:
+  - Adicionada seção de filtro de data no Dashboard com campos de data inicial e final
+  - Implementados estados `startDate` e `endDate` no componente Dashboard
+  - Adicionado useEffect para recarregar estatísticas quando os filtros de data mudarem
+  - Modificada função `fetchDashboardStats` para aceitar parâmetros opcionais de data
+  - Aplicados filtros `.gte('created_time', startDate)` e `.lte('created_time', endDate)` na query do Supabase
+  - Adicionado botão "Limpar Filtros" que aparece quando há filtros ativos
+  - Interface responsiva com campos de data lado a lado
+- **Arquivos Afetados**:
+  - `components/Dashboard.tsx`:
+    - Linhas 71-73: Adicionados estados startDate e endDate
+    - Linhas 114: Passados parâmetros de data para fetchDashboardStats
+    - Linhas 187-191: Adicionado useEffect para recarregar stats quando datas mudam
+    - Linhas 299-337: Adicionada seção de filtro de data na UI
+  - `services/supabaseService.ts`:
+    - Linha 144: Assinatura da função alterada para aceitar parâmetros opcionais
+    - Linhas 154-165: Aplicados filtros de data na query
+- **Motivo**: Permitir análise de KPIs, status e motoristas em períodos específicos
+- **Status**: Concluído
+- **Resultado**: Dashboard agora possui filtros de data funcionais que afetam KPIs, gráficos e distribuições
+
 ## Decisões Técnicas
 
 ### 2025-12-08 - Estrutura de Arquivos Duplicada (RESOLVIDO)
