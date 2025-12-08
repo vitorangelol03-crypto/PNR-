@@ -30,7 +30,8 @@ Sistema de gerenciamento logístico que permite visualizar dados através de um 
 ├── /components
 │   ├── Dashboard.tsx               # Dashboard principal com KPIs e tabela
 │   ├── ConnectionModal.tsx         # Modal de conexão com Supabase
-│   └── ImportModal.tsx             # Modal de importação de dados CSV
+│   ├── ImportModal.tsx             # Modal de importação de dados CSV
+│   └── BulkStatusModal.tsx         # Modal de atualização em massa de status interno
 └── /services
     └── supabaseService.ts          # Serviço de integração com Supabase
 ```
@@ -45,6 +46,9 @@ Sistema de gerenciamento logístico que permite visualizar dados através de um 
 - [x] Serviço de integração com Supabase
 - [x] Filtros de data com opções predefinidas e personalizado
 - [x] Dropdown de período (Todos, Últimos 5/10/15/20/30 dias, Personalizado)
+- [x] Pesquisa em massa por múltiplos códigos de rastreio
+- [x] Feedback visual de códigos encontrados e não encontrados
+- [x] Atualização em massa de status interno com modal dedicado
 
 ### Configuração Atual
 - **Supabase URL**: https://rmaiejrslwbbizviqejx.supabase.co (hardcoded como fallback)
@@ -179,6 +183,39 @@ Sistema de gerenciamento logístico que permite visualizar dados através de um 
 - **Motivo**: Fornecer feedback claro ao usuário sobre quais códigos foram localizados e quais não existem no sistema
 - **Status**: Concluído
 - **Resultado**: Após pesquisas em massa, o usuário vê imediatamente quais códigos foram encontrados (verde) e quais não foram encontrados (vermelho), melhorando a experiência e facilitando a identificação de possíveis erros de digitação
+
+### 2025-12-08 - Implementação de Atualização em Massa de Status Interno
+- **Modificações**:
+  - Criada interface `BulkSearchResult` para retornar tickets encontrados e códigos não encontrados
+  - Implementada função `fetchTicketsByTrackingCodes()` no serviço para buscar múltiplos tickets por código
+  - Implementada função `updateMultipleTicketsStatus()` no serviço para atualizar status de múltiplos tickets usando `.in()`
+  - Criado componente `BulkStatusModal.tsx` com fluxo completo de atualização em massa
+  - Modal possui 4 etapas: input de códigos, confirmação, processamento e resultado
+  - Sistema mostra quais códigos foram encontrados (verde) e não encontrados (vermelho)
+  - Permite selecionar/desselecionar tickets individuais antes de atualizar
+  - Mostra preview do status atual vs. novo status
+  - Adicionado botão "Status em Massa" no header do Dashboard com ícone RefreshCw
+  - Integrado modal com callbacks de sucesso para recarregar dados automaticamente
+- **Arquivos Afetados**:
+  - `services/supabaseService.ts`:
+    - Criada interface `BulkSearchResult` (linhas 339-342)
+    - Implementada `fetchTicketsByTrackingCodes()` (linhas 344-391)
+    - Implementada `updateMultipleTicketsStatus()` (linhas 393-402)
+  - `components/BulkStatusModal.tsx`:
+    - Novo arquivo criado com componente completo de atualização em massa
+    - Inclui estados para gerenciar fluxo de 4 etapas
+    - Sistema de seleção com checkboxes e "selecionar todos"
+    - Feedback visual com badges coloridos e ícones
+    - Indicadores de progresso durante processamento
+  - `components/Dashboard.tsx`:
+    - Importado `BulkStatusModal` (linha 5)
+    - Importado ícone `RefreshCw` (linha 12)
+    - Adicionado estado `isBulkStatusOpen` (linha 64)
+    - Adicionado botão "Status em Massa" no header (linhas 316-321)
+    - Renderizado `BulkStatusModal` no final do componente (linhas 804-808)
+- **Motivo**: Permitir atualização rápida do status interno de múltiplos tickets simultaneamente, economizando tempo ao processar lotes de pedidos
+- **Status**: Concluído
+- **Resultado**: Usuários podem agora colar múltiplos códigos de rastreio, visualizar quais foram encontrados, selecionar um novo status e atualizar todos de uma vez. O sistema fornece feedback claro em cada etapa e atualiza automaticamente o dashboard após conclusão
 
 ## Decisões Técnicas
 

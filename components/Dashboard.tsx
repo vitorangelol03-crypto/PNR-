@@ -2,13 +2,14 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { getSupabase, fetchTicketsPaginated, fetchDashboardStats, fetchUniqueDrivers, updateTicketInternal, ColumnFilters, parseTrackingCodes, SearchResult } from '../services/supabaseService';
 import { Ticket, KpiStats } from '../types';
 import { ImportModal } from './ImportModal';
-import { 
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, 
-  PieChart, Pie, Cell, Legend 
+import { BulkStatusModal } from './BulkStatusModal';
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend
 } from 'recharts';
 import {
   Truck, Search, Filter, AlertTriangle, Clock,
-  Upload, FileText, Loader2, ChevronLeft, ChevronRight, AlertCircle, X, CheckCircle, XCircle
+  Upload, FileText, Loader2, ChevronLeft, ChevronRight, AlertCircle, X, CheckCircle, XCircle, RefreshCw
 } from 'lucide-react';
 import { RealtimeChannel } from '@supabase/supabase-js';
 
@@ -60,6 +61,7 @@ export const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [loadingTable, setLoadingTable] = useState(false);
   const [isImportOpen, setImportOpen] = useState(false);
+  const [isBulkStatusOpen, setBulkStatusOpen] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   
@@ -311,7 +313,13 @@ export const Dashboard: React.FC = () => {
           <span className="text-xs text-gray-400 hidden md:block">
             Atualizado: {lastUpdate.toLocaleTimeString()}
           </span>
-          <button 
+          <button
+            onClick={() => setBulkStatusOpen(true)}
+            className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition text-sm font-medium"
+          >
+            <RefreshCw className="w-4 h-4" /> Status em Massa
+          </button>
+          <button
             onClick={() => setImportOpen(true)}
             className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition text-sm font-medium"
           >
@@ -787,9 +795,15 @@ export const Dashboard: React.FC = () => {
         </div>
       </main>
 
-      <ImportModal 
-        isOpen={isImportOpen} 
+      <ImportModal
+        isOpen={isImportOpen}
         onClose={() => setImportOpen(false)}
+        onSuccess={() => { loadTableData(); loadStats(); }}
+      />
+
+      <BulkStatusModal
+        isOpen={isBulkStatusOpen}
+        onClose={() => setBulkStatusOpen(false)}
         onSuccess={() => { loadTableData(); loadStats(); }}
       />
     </div>

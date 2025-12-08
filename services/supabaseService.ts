@@ -327,11 +327,76 @@ export const fetchUniqueDrivers = async (): Promise<string[]> => {
 
 export const updateTicketInternal = async (id: string, updates: Partial<Ticket>) => {
   if (!supabase) throw new Error("Supabase client not initialized");
-  
+
   const { error } = await supabase
     .from('tickets')
     .update(updates)
     .eq('ticket_id', id);
+
+  if (error) throw error;
+};
+
+export interface BulkSearchResult {
+  foundTickets: Ticket[];
+  notFoundCodes: string[];
+}
+
+export const fetchTicketsByTrackingCodes = async (codes: string[]): Promise<BulkSearchResult> => {
+  if (!supabase) throw new Error("Supabase client not initialized");
+
+  if (codes.length === 0) {
+    return { foundTickets: [], notFoundCodes: [] };
+  }
+
+  const numericCodes = codes.filter(c => /^\d+$/.test(c));
+  const textCodes = codes.filter(c => !/^\d+$/.test(c));
+
+  const conditions: string[] = [];
+
+  if (textCodes.length > 0) {
+    conditions.push(`spxtn.in.(${textCodes.join(',')})`);
+  }
+
+  if (numericCodes.length > 0) {
+    conditions.push(`ticket_id.in.(${numericCodes.join(',')})`);
+    conditions.push(`spxtn.in.(${numericCodes.join(',')})`);
+  }
+
+  const { data, error } = await supabase
+    .from('tickets')
+    .select('*')
+    .or(conditions.join(','));
+
+  if (error) throw error;
+
+  const foundTickets = (data as Ticket[]) || [];
+
+  const foundCodes: string[] = [];
+  foundTickets.forEach(ticket => {
+    const spxtn = ticket.spxtn?.toString() || '';
+    const ticketId = ticket.ticket_id?.toString() || '';
+
+    codes.forEach(code => {
+      if (spxtn === code || ticketId === code) {
+        if (!foundCodes.includes(code)) {
+          foundCodes.push(code);
+        }
+      }
+    });
+  });
+
+  const notFoundCodes = codes.filter(code => !foundCodes.includes(code));
+
+  return { foundTickets, notFoundCodes };
+};
+
+export const updateMultipleTicketsStatus = async (ticketIds: string[], newStatus: string): Promise<void> => {
+  if (!supabase) throw new Error("Supabase client not initialized");
+
+  const { error } = await supabase
+    .from('tickets')
+    .update({ internal_status: newStatus })
+    .in('ticket_id', ticketIds);
 
   if (error) throw error;
 };
