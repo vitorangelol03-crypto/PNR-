@@ -154,6 +154,32 @@ Sistema de gerenciamento logístico que permite visualizar dados através de um 
 - **Status**: Concluído
 - **Resultado**: Usuários podem agora colar múltiplos códigos de rastreio (separados por quebra de linha) e o sistema busca todos simultaneamente
 
+### 2025-12-08 - Feedback Visual de Resultados da Pesquisa em Massa
+- **Modificações**:
+  - Criada interface `SearchResult` no serviço para retornar informações sobre códigos pesquisados, encontrados e não encontrados
+  - Modificado retorno de `fetchTicketsPaginated()` para incluir objeto `searchResult` opcional
+  - Implementada lógica de comparação entre códigos pesquisados e tickets encontrados no banco
+  - Adicionado estado `searchResult` no Dashboard para armazenar resultado da busca
+  - Criado componente visual mostrando feedback detalhado após busca em massa
+  - Códigos encontrados exibidos com badge verde e ícone CheckCircle
+  - Códigos não encontrados exibidos com badge vermelho e ícone XCircle
+  - Feedback aparece entre a barra de pesquisa e a tabela de resultados
+- **Arquivos Afetados**:
+  - `services/supabaseService.ts`:
+    - Criada interface `SearchResult` (linhas 47-51)
+    - Modificado tipo de retorno de `fetchTicketsPaginated()` para incluir `searchResult`
+    - Adicionadas variáveis `searchedCodes` e `isMultiCodeSearch` para rastreamento
+    - Implementada lógica de comparação de códigos após query (linhas 206-231)
+  - `components/Dashboard.tsx`:
+    - Importada interface `SearchResult` do serviço
+    - Adicionado estado `searchResult` (linha 79)
+    - Atualizada função `loadTableData()` para capturar `searchResult` (linha 188)
+    - Importados ícones `CheckCircle` e `XCircle` do lucide-react
+    - Criado componente de feedback visual (linhas 536-576)
+- **Motivo**: Fornecer feedback claro ao usuário sobre quais códigos foram localizados e quais não existem no sistema
+- **Status**: Concluído
+- **Resultado**: Após pesquisas em massa, o usuário vê imediatamente quais códigos foram encontrados (verde) e quais não foram encontrados (vermelho), melhorando a experiência e facilitando a identificação de possíveis erros de digitação
+
 ## Decisões Técnicas
 
 ### 2025-12-08 - Estrutura de Arquivos Duplicada (RESOLVIDO)

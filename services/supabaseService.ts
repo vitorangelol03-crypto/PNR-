@@ -44,12 +44,18 @@ interface FetchParams {
   filters?: ColumnFilters;
 }
 
-export const fetchTicketsPaginated = async ({ 
-  page, 
-  pageSize, 
-  searchTerm, 
-  filters 
-}: FetchParams): Promise<{ data: Ticket[], count: number }> => {
+export interface SearchResult {
+  searchedCodes: string[];
+  foundCodes: string[];
+  notFoundCodes: string[];
+}
+
+export const fetchTicketsPaginated = async ({
+  page,
+  pageSize,
+  searchTerm,
+  filters
+}: FetchParams): Promise<{ data: Ticket[], count: number, searchResult?: SearchResult }> => {
   if (!supabase) throw new Error("Supabase client not initialized");
   
   const from = (page - 1) * pageSize;
@@ -59,11 +65,17 @@ export const fetchTicketsPaginated = async ({
     .from('tickets')
     .select('*', { count: 'exact' });
 
+  let searchedCodes: string[] = [];
+  let isMultiCodeSearch = false;
+
   // 1. Busca Global (Barra Superior)
   if (searchTerm && searchTerm.trim() !== '') {
     const codes = parseTrackingCodes(searchTerm);
 
     if (codes.length > 1) {
+      isMultiCodeSearch = true;
+      searchedCodes = codes;
+
       const numericCodes = codes.filter(c => /^\d+$/.test(c));
       const textCodes = codes.filter(c => !/^\d+$/.test(c));
 
@@ -99,6 +111,9 @@ export const fetchTicketsPaginated = async ({
       const codes = parseTrackingCodes(filters.tracking);
 
       if (codes.length > 1) {
+        isMultiCodeSearch = true;
+        searchedCodes = codes;
+
         const numericCodes = codes.filter(c => /^\d+$/.test(c));
         const textCodes = codes.filter(c => !/^\d+$/.test(c));
 
@@ -181,14 +196,44 @@ export const fetchTicketsPaginated = async ({
 
   // Ordenação e Paginação
   const { data, count, error } = await query
-    .order('sla_deadline', { ascending: true }) // Prioridade por prazo
+    .order('sla_deadline', { ascending: true })
     .range(from, to);
 
   if (error) throw error;
 
-  return { 
-    data: (data as Ticket[]) || [], 
-    count: count || 0 
+  const tickets = (data as Ticket[]) || [];
+
+  let searchResult: SearchResult | undefined;
+
+  if (isMultiCodeSearch && searchedCodes.length > 0) {
+    const foundCodes: string[] = [];
+
+    tickets.forEach(ticket => {
+      const spxtn = ticket.spxtn?.toString() || '';
+      const ticketId = ticket.ticket_id?.toString() || '';
+
+      searchedCodes.forEach(code => {
+        if (spxtn === code || ticketId === code) {
+          if (!foundCodes.includes(code)) {
+            foundCodes.push(code);
+          }
+        }
+      });
+    });
+
+    const notFoundCodes = searchedCodes.filter(code => !foundCodes.includes(code));
+
+    searchResult = {
+      searchedCodes,
+      foundCodes,
+      notFoundCodes
+    };
+  }
+
+  return {
+    data: tickets,
+    count: count || 0,
+    searchResult
   };
 };
 

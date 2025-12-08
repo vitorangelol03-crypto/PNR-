@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { getSupabase, fetchTicketsPaginated, fetchDashboardStats, fetchUniqueDrivers, updateTicketInternal, ColumnFilters, parseTrackingCodes } from '../services/supabaseService';
+import { getSupabase, fetchTicketsPaginated, fetchDashboardStats, fetchUniqueDrivers, updateTicketInternal, ColumnFilters, parseTrackingCodes, SearchResult } from '../services/supabaseService';
 import { Ticket, KpiStats } from '../types';
 import { ImportModal } from './ImportModal';
 import { 
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, 
   PieChart, Pie, Cell, Legend 
 } from 'recharts';
-import { 
-  Truck, Search, Filter, AlertTriangle, Clock, 
-  Upload, FileText, Loader2, ChevronLeft, ChevronRight, AlertCircle, X
+import {
+  Truck, Search, Filter, AlertTriangle, Clock,
+  Upload, FileText, Loader2, ChevronLeft, ChevronRight, AlertCircle, X, CheckCircle, XCircle
 } from 'lucide-react';
 import { RealtimeChannel } from '@supabase/supabase-js';
 
@@ -76,6 +76,7 @@ export const Dashboard: React.FC = () => {
   // Global Search
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [searchResult, setSearchResult] = useState<SearchResult | null>(null);
 
   // Column Filters
   const [colFilters, setColFilters] = useState<ColumnFilters>({
@@ -176,7 +177,7 @@ export const Dashboard: React.FC = () => {
     setLoadingTable(true);
     setErrorMsg(null);
     try {
-      const { data, count } = await fetchTicketsPaginated({
+      const { data, count, searchResult: result } = await fetchTicketsPaginated({
         page,
         pageSize,
         searchTerm: debouncedSearch,
@@ -184,6 +185,7 @@ export const Dashboard: React.FC = () => {
       });
       setTickets(data);
       setTotalCount(count);
+      setSearchResult(result || null);
       setLastUpdate(new Date());
     } catch (err: any) {
       // Extract error message safely
@@ -530,6 +532,48 @@ export const Dashboard: React.FC = () => {
                </div>
              )}
           </div>
+
+          {/* Search Results Feedback */}
+          {searchResult && (searchResult.foundCodes.length > 0 || searchResult.notFoundCodes.length > 0) && (
+            <div className="px-4 py-3 border-b border-gray-100 bg-gray-50/30">
+              <div className="flex flex-col gap-3">
+                {searchResult.foundCodes.length > 0 && (
+                  <div className="flex items-start gap-2">
+                    <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-green-700 mb-1">
+                        Encontrados ({searchResult.foundCodes.length}):
+                      </p>
+                      <div className="flex flex-wrap gap-1">
+                        {searchResult.foundCodes.map(code => (
+                          <span key={code} className="inline-block bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded">
+                            {code}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {searchResult.notFoundCodes.length > 0 && (
+                  <div className="flex items-start gap-2">
+                    <XCircle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-red-700 mb-1">
+                        Não encontrados ({searchResult.notFoundCodes.length}):
+                      </p>
+                      <div className="flex flex-wrap gap-1">
+                        {searchResult.notFoundCodes.map(code => (
+                          <span key={code} className="inline-block bg-red-100 text-red-800 text-xs px-2 py-0.5 rounded">
+                            {code}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Table Content */}
           <div className="overflow-x-auto min-h-[400px]">
