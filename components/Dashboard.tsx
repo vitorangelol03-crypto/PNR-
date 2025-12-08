@@ -69,6 +69,7 @@ export const Dashboard: React.FC = () => {
   const [totalCount, setTotalCount] = useState(0);
 
   // Date Filter States
+  const [periodType, setPeriodType] = useState<'all' | 'last5' | 'last10' | 'last15' | 'last20' | 'last30' | 'custom'>('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
@@ -88,6 +89,35 @@ export const Dashboard: React.FC = () => {
   const [debouncedColFilters, setDebouncedColFilters] = useState<ColumnFilters>(colFilters);
 
   const supabase = getSupabase();
+
+  // Calculate date range based on period type
+  const calculateDateRange = (): { start: string; end: string } => {
+    if (periodType === 'custom') {
+      return { start: startDate, end: endDate };
+    }
+
+    if (periodType === 'all') {
+      return { start: '', end: '' };
+    }
+
+    const today = new Date();
+    const end = today.toISOString().split('T')[0];
+
+    const daysMap = {
+      last5: 5,
+      last10: 10,
+      last15: 15,
+      last20: 20,
+      last30: 30
+    };
+
+    const days = daysMap[periodType];
+    const startDateObj = new Date(today);
+    startDateObj.setDate(today.getDate() - days);
+    const start = startDateObj.toISOString().split('T')[0];
+
+    return { start, end };
+  };
 
   // Debounce global search
   useEffect(() => {
@@ -110,8 +140,9 @@ export const Dashboard: React.FC = () => {
   // Load Overview Data (KPIs, Charts, Drivers List) - Runs once or on heavy updates
   const loadStats = async () => {
     try {
+      const dateRange = calculateDateRange();
       const [stats, drivers] = await Promise.all([
-        fetchDashboardStats(startDate, endDate),
+        fetchDashboardStats(dateRange.start, dateRange.end),
         fetchUniqueDrivers()
       ]);
       setKpis(stats.kpis);
@@ -188,7 +219,7 @@ export const Dashboard: React.FC = () => {
   useEffect(() => {
     if (!supabase) return;
     loadStats();
-  }, [startDate, endDate]);
+  }, [periodType, startDate, endDate]);
 
   // Effect trigger for table data
   useEffect(() => {
@@ -303,27 +334,60 @@ export const Dashboard: React.FC = () => {
               <Filter className="w-4 h-4 text-gray-500" />
               <span className="text-sm font-medium text-gray-700">Filtrar por Período:</span>
             </div>
+
+            {/* Period Type Dropdown */}
             <div className="flex items-center gap-2">
-              <label className="text-xs text-gray-600">Data Inicial:</label>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              <select
+                value={periodType}
+                onChange={(e) => {
+                  const newPeriod = e.target.value as typeof periodType;
+                  setPeriodType(newPeriod);
+                  if (newPeriod !== 'custom') {
+                    setStartDate('');
+                    setEndDate('');
+                  }
+                }}
+                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white font-medium"
+              >
+                <option value="all">Todos os dados</option>
+                <option value="last5">Últimos 5 dias</option>
+                <option value="last10">Últimos 10 dias</option>
+                <option value="last15">Últimos 15 dias</option>
+                <option value="last20">Últimos 20 dias</option>
+                <option value="last30">Últimos 30 dias</option>
+                <option value="custom">Personalizado</option>
+              </select>
             </div>
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-gray-600">Data Final:</label>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            {(startDate || endDate) && (
+
+            {/* Custom Date Inputs - Only show when custom is selected */}
+            {periodType === 'custom' && (
+              <>
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-gray-600">De:</label>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-gray-600">Até:</label>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </>
+            )}
+
+            {/* Clear Filters Button */}
+            {periodType !== 'all' && (
               <button
                 onClick={() => {
+                  setPeriodType('all');
                   setStartDate('');
                   setEndDate('');
                 }}
@@ -334,6 +398,21 @@ export const Dashboard: React.FC = () => {
               </button>
             )}
           </div>
+
+          {/* Display selected period info */}
+          {periodType !== 'all' && (
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <p className="text-xs text-gray-500">
+                {periodType === 'custom' && startDate && endDate ? (
+                  <>Exibindo dados de {new Date(startDate).toLocaleDateString('pt-BR')} a {new Date(endDate).toLocaleDateString('pt-BR')}</>
+                ) : periodType === 'custom' ? (
+                  <>Selecione as datas inicial e final</>
+                ) : (
+                  <>Exibindo dados de {new Date(calculateDateRange().start).toLocaleDateString('pt-BR')} a {new Date(calculateDateRange().end).toLocaleDateString('pt-BR')}</>
+                )}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* KPIs Section */}

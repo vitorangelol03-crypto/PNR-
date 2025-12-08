@@ -40,9 +40,11 @@ Sistema de gerenciamento logístico que permite visualizar dados através de um 
 ### Funcionalidades Implementadas
 - [x] Conexão com Supabase (manual e via variáveis de ambiente)
 - [x] Modal de conexão customizável
-- [x] Dashboard principal
-- [x] Modal de importação de dados
+- [x] Dashboard principal com KPIs e gráficos
+- [x] Modal de importação de dados CSV
 - [x] Serviço de integração com Supabase
+- [x] Filtros de data com opções predefinidas e personalizado
+- [x] Dropdown de período (Todos, Últimos 5/10/15/20/30 dias, Personalizado)
 
 ### Configuração Atual
 - **Supabase URL**: https://rmaiejrslwbbizviqejx.supabase.co (hardcoded como fallback)
@@ -104,6 +106,27 @@ Sistema de gerenciamento logístico que permite visualizar dados através de um 
 - **Motivo**: Permitir análise de KPIs, status e motoristas em períodos específicos
 - **Status**: Concluído
 - **Resultado**: Dashboard agora possui filtros de data funcionais que afetam KPIs, gráficos e distribuições
+
+### 2025-12-08 - Implementação de Dropdown de Período com Opções Predefinidas
+- **Modificações**:
+  - Adicionado estado `periodType` com opções: 'all', 'last5', 'last10', 'last15', 'last20', 'last30', 'custom'
+  - Criada função `calculateDateRange()` que calcula automaticamente o intervalo de datas baseado no período selecionado
+  - Implementado dropdown/select com 7 opções: "Todos os dados", "Últimos 5 dias", "Últimos 10 dias", "Últimos 15 dias", "Últimos 20 dias", "Últimos 30 dias", "Personalizado"
+  - Campos de data (De: e Até:) agora são exibidos condicionalmente apenas quando "Personalizado" é selecionado
+  - Adicionado texto informativo mostrando o período selecionado com datas formatadas em pt-BR
+  - Botão "Limpar Filtros" agora reseta tanto o dropdown quanto as datas personalizadas
+  - Modificada função `loadStats()` para usar as datas calculadas dinamicamente
+  - Atualizado useEffect para reagir a mudanças em `periodType`, `startDate` e `endDate`
+- **Arquivos Afetados**:
+  - `components/Dashboard.tsx`:
+    - Linha 72: Adicionado estado `periodType`
+    - Linhas 93-120: Criada função `calculateDateRange()`
+    - Linhas 141-147: Modificada função `loadStats()` para usar datas calculadas
+    - Linha 222: Atualizado useEffect para incluir `periodType` nas dependências
+    - Linhas 330-416: Reformulada seção de filtro de data com dropdown e campos condicionais
+- **Motivo**: Facilitar a seleção rápida de períodos comuns mantendo flexibilidade para datas personalizadas
+- **Status**: Concluído
+- **Resultado**: Interface de filtro mais intuitiva com opções predefinidas e feedback visual do período selecionado
 
 ## Decisões Técnicas
 
