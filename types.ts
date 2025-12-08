@@ -39,3 +39,60 @@ export interface DashboardData {
   tickets: Ticket[];
   totalCount: number;
 }
+
+export type ImportOperationType = 'create' | 'update' | 'skip';
+
+export interface FieldChange {
+  field: string;
+  oldValue: any;
+  newValue: any;
+}
+
+export interface ImportPreviewItem {
+  ticket: Ticket;
+  operation: ImportOperationType;
+  changes: FieldChange[];
+  error?: string;
+  existingTicket?: Ticket;
+}
+
+export interface ImportResult {
+  success: boolean;
+  totalProcessed: number;
+  newRecords: number;
+  updatedRecords: number;
+  skippedRecords: number;
+  errors: string[];
+  logId?: number;
+}
+
+export interface ImportLog {
+  id: number;
+  import_date: string;
+  imported_by: string;
+  total_rows: number;
+  new_records: number;
+  updated_records: number;
+  skipped_records: number;
+  file_name: string;
+  details: {
+    items: Array<{
+      ticket_id: string;
+      operation: ImportOperationType;
+      changes: FieldChange[];
+      error?: string;
+    }>;
+    errors: string[];
+  };
+  created_at: string;
+}
+
+export interface ImportAnalysis {
+  previews: ImportPreviewItem[];
+  summary: {
+    total: number;
+    toCreate: number;
+    toUpdate: number;
+    toSkip: number;
+  };
+}

@@ -3,13 +3,14 @@ import { getSupabase, fetchTicketsPaginated, fetchDashboardStats, fetchUniqueDri
 import { Ticket, KpiStats } from '../types';
 import { ImportModal } from './ImportModal';
 import { BulkStatusModal } from './BulkStatusModal';
+import { ImportHistoryModal } from './ImportHistoryModal';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend
 } from 'recharts';
 import {
   Truck, Search, Filter, AlertTriangle, Clock,
-  Upload, FileText, Loader2, ChevronLeft, ChevronRight, AlertCircle, X, CheckCircle, XCircle, RefreshCw
+  Upload, FileText, Loader2, ChevronLeft, ChevronRight, AlertCircle, X, CheckCircle, XCircle, RefreshCw, History
 } from 'lucide-react';
 import { RealtimeChannel } from '@supabase/supabase-js';
 
@@ -78,6 +79,7 @@ export const Dashboard: React.FC = () => {
   const [loadingTable, setLoadingTable] = useState(false);
   const [isImportOpen, setImportOpen] = useState(false);
   const [isBulkStatusOpen, setBulkStatusOpen] = useState(false);
+  const [isHistoryOpen, setHistoryOpen] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   
@@ -347,6 +349,12 @@ export const Dashboard: React.FC = () => {
             className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition text-sm font-medium"
           >
             <Upload className="w-4 h-4" /> Importar CSV
+          </button>
+          <button
+            onClick={() => setHistoryOpen(true)}
+            className="flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition text-sm font-medium"
+          >
+            <History className="w-4 h-4" /> Histórico
           </button>
         </div>
       </header>
@@ -857,6 +865,11 @@ export const Dashboard: React.FC = () => {
         isOpen={isBulkStatusOpen}
         onClose={() => setBulkStatusOpen(false)}
         onSuccess={() => { loadTableData(); loadStats(); }}
+      />
+
+      <ImportHistoryModal
+        isOpen={isHistoryOpen}
+        onClose={() => setHistoryOpen(false)}
       />
     </div>
   );

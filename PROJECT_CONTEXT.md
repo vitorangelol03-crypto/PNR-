@@ -391,6 +391,227 @@ Sistema de gerenciamento logístico que permite visualizar dados através de um 
   - Sem erros de SQL ou colunas faltantes
   - Projeto totalmente funcional e conectado ao Supabase do usuário
 
+### 2025-12-08 - Sistema Inteligente de Importação com Detecção de Duplicados e LOG
+- **Modificações**:
+  1. **Nova Tabela de LOG no Banco de Dados**:
+     - Criada tabela `import_logs` para armazenar histórico completo de importações
+     - Estrutura completa com 10 colunas:
+       - id (bigserial PRIMARY KEY auto-incremento)
+       - import_date (timestamptz, data/hora da importação)
+       - imported_by (text, usuário que importou - padrão 'Sistema')
+       - total_rows (integer, total processado)
+       - new_records (integer, novos criados)
+       - updated_records (integer, atualizados)
+       - skipped_records (integer, ignorados/erro)
+       - file_name (text, nome do arquivo CSV)
+       - details (jsonb, detalhes completos das mudanças)
+       - created_at (timestamptz, timestamp de criação)
+     - Criados 2 índices otimizados:
+       - idx_import_logs_import_date (DESC para ordenação)
+       - idx_import_logs_created_at (DESC para ordenação)
+     - RLS habilitado com políticas públicas para leitura e inserção
+     - Migration: `create_import_logs_table.sql`
+
+  2. **Novas Interfaces TypeScript**:
+     - `ImportOperationType`: Type union 'create' | 'update' | 'skip'
+     - `FieldChange`: Interface para rastrear mudanças individuais de campos
+       - field: string (nome do campo)
+       - oldValue: any (valor anterior)
+       - newValue: any (valor novo)
+     - `ImportPreviewItem`: Representa cada item no preview da importação
+       - ticket: Ticket (dados do ticket)
+       - operation: ImportOperationType (tipo de operação)
+       - changes: FieldChange[] (lista de mudanças)
+       - error?: string (mensagem de erro se houver)
+       - existingTicket?: Ticket (ticket existente se for atualização)
+     - `ImportResult`: Resultado final da importação
+       - success: boolean
+       - totalProcessed: number
+       - newRecords: number
+       - updatedRecords: number
+       - skippedRecords: number
+       - errors: string[]
+       - logId?: number (ID do log criado)
+     - `ImportLog`: Estrutura do log armazenado no banco
+       - Todos os campos da tabela import_logs
+       - details tipado com estrutura específica
+     - `ImportAnalysis`: Resultado da análise pré-importação
+       - previews: ImportPreviewItem[]
+       - summary: estatísticas agregadas
+
+  3. **Novas Funções no Serviço Supabase**:
+     - `analyzeImportData(ticketsFromCsv: Ticket[]): Promise<ImportAnalysis>`
+       - Analisa dados do CSV antes da importação
+       - Busca todos os tickets existentes em uma única query otimizada
+       - Compara ticket_id e spxtn para detectar duplicados
+       - Identifica mudanças campo a campo
+       - Classifica cada registro como: create, update ou skip
+       - Retorna preview completo com todas as mudanças detectadas
+
+     - `executeSmartImport(previewItems: ImportPreviewItem[]): Promise<ImportResult>`
+       - Executa importação inteligente preservando dados internos
+       - Separa registros novos dos que serão atualizados
+       - Novos: INSERT completo com todos os campos
+       - Atualizações: UPDATE apenas dos campos operacionais:
+         - driver_name, station, pnr_value, original_status, sla_deadline
+       - PRESERVA campos internos:
+         - internal_status (mantém trabalho do analista)
+         - internal_notes (mantém observações)
+         - internal_status_updated_at (mantém histórico)
+       - Processa em lotes de 100 registros para performance
+       - Registra todos os erros sem interromper processo
+       - Retorna estatísticas completas
+
+     - `saveImportLog(fileName, result, previewItems): Promise<number | null>`
+       - Salva log completo da importação no banco
+       - Armazena JSON detalhado em `details`:
+         - Array com todos os itens processados
+         - Lista de erros encontrados
+       - Retorna ID do log criado
+
+     - `fetchImportLogs(page, pageSize): Promise<{ logs, count }>`
+       - Busca histórico de importações com paginação
+       - Ordenação por import_date DESC (mais recentes primeiro)
+       - Suporta paginação servidor-side
+
+  4. **Novo Componente: ImportPreviewTable**:
+     - Tabela interativa de preview dos dados antes da importação
+     - Colunas: Status | Ticket ID | Motorista | Status Original | Mudanças
+     - Badges coloridos por operação:
+       - Verde (Novo) - registros que serão criados
+       - Amarelo (Atualizar) - registros que serão atualizados
+       - Cinza (Ignorar) - registros com erro
+     - Linhas expansíveis (click to expand)
+     - Ao expandir, mostra diff detalhado:
+       - Valor antigo riscado em vermelho
+       - Seta (→) indicando mudança
+       - Valor novo em verde
+     - Formatação inteligente de valores (moeda, datas, etc)
+     - Limitação de 100 registros no preview para performance
+     - Aviso quando há mais registros (ex: "Mostrando 100 de 500")
+
+  5. **Novo Componente: ImportHistoryModal**:
+     - Modal completo para visualizar histórico de importações
+     - Lista paginada de todas as importações (10 por página)
+     - Para cada importação mostra:
+       - Nome do arquivo
+       - Data/hora formatada (DD/MM/YYYY HH:mm)
+       - Badge de status: "Sucesso" (verde) ou "Com Avisos" (amarelo)
+       - Estatísticas: Novos | Atualizados | Ignorados
+     - Logs expansíveis (accordion)
+     - Ao expandir mostra:
+       - Resumo completo (total, importado por, etc)
+       - Lista de erros/avisos (se houver)
+       - Tabela detalhada com todos os registros:
+         - Ticket ID | Operação | Mudanças
+       - Limitação de 50 registros visíveis por log
+     - Controles de paginação (Anterior/Próxima)
+     - Estados de loading e erro tratados
+     - Design responsivo e profissional
+
+  6. **Refatoração Completa do ImportModal**:
+     - Fluxo multi-etapas implementado:
+       - **Etapa 1 - Upload**: Drag-and-drop de arquivo CSV
+       - **Etapa 2 - Analyzing**: Loading com mensagem "Detectando duplicados..."
+       - **Etapa 3 - Preview**: Visualização completa das mudanças
+       - **Etapa 4 - Importing**: Processamento com feedback
+       - **Etapa 5 - Success**: Resultado final com estatísticas
+
+     - **Etapa Preview** (principal):
+       - Resumo visual no topo com 3 cards:
+         - Novos Registros (verde)
+         - Serão Atualizados (amarelo)
+         - Serão Ignorados (cinza)
+       - Aviso destacado quando houver atualizações:
+         - "Atenção: X registro(s) será(ão) atualizado(s)"
+         - "Seus dados internos serão preservados"
+       - Tabela de preview com ImportPreviewTable
+       - Checkbox obrigatório: "Confirmo que revisei os dados"
+       - Botões: "Cancelar" e "Executar Importação"
+
+     - **Validações**:
+       - Checkbox deve ser marcado para confirmar
+       - Alert se tentar importar sem confirmar
+
+     - **Funcionalidades**:
+       - Botão "Voltar" no preview para fazer novo upload
+       - Reset completo do estado ao fechar
+       - Auto-fechamento após sucesso (3 segundos)
+       - Callback onSuccess recarrega dados do dashboard
+       - Tratamento completo de erros em cada etapa
+
+  7. **Dashboard - Botão de Histórico**:
+     - Adicionado botão "Histórico" no header
+     - Posicionado ao lado do botão "Importar CSV"
+     - Ícone History (relógio com seta)
+     - Cor cinza (bg-gray-600/700) para diferenciação
+     - Abre ImportHistoryModal ao clicar
+     - Estado isHistoryOpen para controlar modal
+
+  8. **Lógica de Detecção de Duplicados**:
+     - Critério principal: ticket_id (IHS Ticket ID)
+     - Critério secundário: spxtn (código de rastreio)
+     - Busca otimizada em uma única query usando .or()
+     - Map para acesso O(1) aos tickets existentes
+     - Comparação campo a campo para detectar mudanças:
+       - driver_name, station, pnr_value, original_status, sla_deadline
+     - Registros sem mudanças são marcados como "skip"
+
+  9. **Preservação de Dados Internos**:
+     - Sistema NUNCA sobrescreve:
+       - internal_status (trabalho do analista)
+       - internal_notes (observações importantes)
+       - internal_status_updated_at (histórico de quando foi mexido)
+       - created_time (data original nunca muda)
+     - Atualiza APENAS campos operacionais do CSV:
+       - Dados do motorista e estação
+       - Valores e status da operação
+       - Prazos SLA
+
+- **Arquivos Criados**:
+  - `supabase/migrations/create_import_logs_table.sql` - Migration do banco
+  - `components/ImportPreviewTable.tsx` - Tabela de preview
+  - `components/ImportHistoryModal.tsx` - Modal de histórico
+
+- **Arquivos Modificados**:
+  - `types.ts` - Adicionadas 7 novas interfaces/types
+  - `services/supabaseService.ts` - Adicionadas 4 novas funções (240 linhas)
+  - `components/ImportModal.tsx` - Refatoração completa com fluxo multi-etapas
+  - `components/Dashboard.tsx` - Adicionado botão e modal de histórico
+
+- **Benefícios da Implementação**:
+  - **Segurança**: Usuário vê todas as mudanças antes de confirmar
+  - **Rastreabilidade**: Histórico completo de todas as importações
+  - **Inteligência**: Detecta e trata duplicados automaticamente
+  - **Preservação**: Trabalho interno do analista nunca é perdido
+  - **Transparência**: Cada mudança é documentada e visível
+  - **Auditoria**: Possível rastrear quem importou o quê e quando
+  - **Eficiência**: Importações grandes processadas em lotes otimizados
+  - **Experiência**: Interface clara e intuitiva em cada etapa
+
+- **Performance**:
+  - Análise inicial: 1 query para todos os tickets existentes
+  - Comparação: O(n) com map para acesso O(1)
+  - Import: Lotes de 100 registros para INSERT
+  - Update: Individualizado para preservar campos específicos
+  - Preview: Limitado a 100 linhas visíveis
+  - Histórico: Paginação servidor-side (10 por página)
+
+- **Motivo**: Atualizar o sistema de importação para ser inteligente, detectando registros duplicados e atualizando apenas os campos necessários enquanto preserva o trabalho manual dos analistas. Adicionar rastreabilidade completa com sistema de LOG persistente
+
+- **Status**: Concluído ✅
+
+- **Resultado**:
+  - Sistema de importação completamente reformulado
+  - Preview interativo mostra exatamente o que será feito
+  - Detecção automática de duplicados por ticket_id e spxtn
+  - Atualização inteligente preserva dados internos
+  - Histórico completo acessível via modal dedicado
+  - LOG detalhado de cada importação salvo no banco
+  - Experiência do usuário profissional e confiável
+  - Todas as mudanças visíveis antes da confirmação
+  - Sistema pronto para produção
+
 ## Sessão de Chat Atual
 
 ### Solicitação do Usuário
@@ -400,6 +621,12 @@ Sistema de gerenciamento logístico que permite visualizar dados através de um 
 4. Conectar projeto ao Supabase real do usuário
 5. Recriar todas as tabelas do zero e do jeito certo
 6. Limpar conexões antigas do código
+7. Implementar sistema inteligente de importação com:
+   - Preview dos dados antes da importação
+   - Detecção de duplicados (ticket_id e spxtn)
+   - Atualização ao invés de criação de novos registros
+   - Feedback visual mostrando o que está sendo criado/atualizado
+   - Sistema de LOG para rastrear histórico de importações
 
 ### Status
 - ✅ Arquivo PROJECT_CONTEXT.md criado
@@ -414,4 +641,10 @@ Sistema de gerenciamento logístico que permite visualizar dados através de um 
 - ✅ Migrations antigas limpas
 - ✅ RLS e políticas de segurança configuradas
 - ✅ Índices otimizados criados
-- ✅ Projeto 100% funcional
+- ✅ Tabela import_logs criada
+- ✅ Sistema de importação inteligente implementado
+- ✅ Preview com detecção de duplicados funcionando
+- ✅ Atualização seletiva de campos implementada
+- ✅ Sistema de LOG persistente implementado
+- ✅ Modal de histórico de importações criado
+- ✅ Projeto 100% funcional com nova funcionalidade

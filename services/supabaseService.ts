@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { SupabaseConfig, Ticket, KpiStats } from '../types';
+import { SupabaseConfig, Ticket, KpiStats, ImportPreviewItem, ImportAnalysis, FieldChange, ImportResult, ImportLog } from '../types';
 
 let supabase: SupabaseClient | null = null;
 
@@ -427,11 +427,263 @@ export const upsertTickets = async (tickets: Ticket[]) => {
   const BATCH_SIZE = 100;
   for (let i = 0; i < tickets.length; i += BATCH_SIZE) {
     const batch = tickets.slice(i, i + BATCH_SIZE);
-    
+
     const { error } = await supabase
       .from('tickets')
       .upsert(batch, { onConflict: 'ticket_id' });
-      
+
     if (error) throw error;
   }
+};
+
+export const analyzeImportData = async (ticketsFromCsv: Ticket[]): Promise<ImportAnalysis> => {
+  if (!supabase) throw new Error("Supabase client not initialized");
+
+  const ticketIds = ticketsFromCsv.map(t => t.ticket_id).filter(Boolean);
+  const spxtns = ticketsFromCsv.map(t => t.spxtn).filter(Boolean);
+
+  const conditions: string[] = [];
+  if (ticketIds.length > 0) {
+    conditions.push(`ticket_id.in.(${ticketIds.join(',')})`);
+  }
+  if (spxtns.length > 0) {
+    conditions.push(`spxtn.in.(${spxtns.join(',')})`);
+  }
+
+  let existingTickets: Ticket[] = [];
+
+  if (conditions.length > 0) {
+    const { data, error } = await supabase
+      .from('tickets')
+      .select('*')
+      .or(conditions.join(','));
+
+    if (error) throw error;
+    existingTickets = (data as Ticket[]) || [];
+  }
+
+  const existingMap = new Map<string, Ticket>();
+  existingTickets.forEach(ticket => {
+    if (ticket.ticket_id) {
+      existingMap.set(ticket.ticket_id, ticket);
+    }
+    if (ticket.spxtn) {
+      existingMap.set(ticket.spxtn, ticket);
+    }
+  });
+
+  const previews: ImportPreviewItem[] = [];
+  let toCreate = 0;
+  let toUpdate = 0;
+  let toSkip = 0;
+
+  ticketsFromCsv.forEach(newTicket => {
+    if (!newTicket.ticket_id) {
+      previews.push({
+        ticket: newTicket,
+        operation: 'skip',
+        changes: [],
+        error: 'Ticket ID não encontrado'
+      });
+      toSkip++;
+      return;
+    }
+
+    const existing = existingMap.get(newTicket.ticket_id) ||
+                     (newTicket.spxtn ? existingMap.get(newTicket.spxtn) : undefined);
+
+    if (existing) {
+      const changes: FieldChange[] = [];
+
+      const fieldsToCompare = [
+        { key: 'driver_name', label: 'Motorista' },
+        { key: 'station', label: 'Estação' },
+        { key: 'pnr_value', label: 'Valor' },
+        { key: 'original_status', label: 'Status' },
+        { key: 'sla_deadline', label: 'SLA' }
+      ];
+
+      fieldsToCompare.forEach(({ key, label }) => {
+        const oldVal = (existing as any)[key];
+        const newVal = (newTicket as any)[key];
+
+        if (oldVal !== newVal) {
+          changes.push({
+            field: label,
+            oldValue: oldVal,
+            newValue: newVal
+          });
+        }
+      });
+
+      if (changes.length > 0) {
+        previews.push({
+          ticket: newTicket,
+          operation: 'update',
+          changes,
+          existingTicket: existing
+        });
+        toUpdate++;
+      } else {
+        previews.push({
+          ticket: newTicket,
+          operation: 'skip',
+          changes: [],
+          error: 'Nenhuma alteração detectada'
+        });
+        toSkip++;
+      }
+    } else {
+      previews.push({
+        ticket: newTicket,
+        operation: 'create',
+        changes: []
+      });
+      toCreate++;
+    }
+  });
+
+  return {
+    previews,
+    summary: {
+      total: ticketsFromCsv.length,
+      toCreate,
+      toUpdate,
+      toSkip
+    }
+  };
+};
+
+export const executeSmartImport = async (previewItems: ImportPreviewItem[]): Promise<ImportResult> => {
+  if (!supabase) throw new Error("Supabase client not initialized");
+
+  const toCreate = previewItems.filter(item => item.operation === 'create');
+  const toUpdate = previewItems.filter(item => item.operation === 'update');
+
+  const errors: string[] = [];
+  let newRecords = 0;
+  let updatedRecords = 0;
+
+  const BATCH_SIZE = 100;
+
+  try {
+    for (let i = 0; i < toCreate.length; i += BATCH_SIZE) {
+      const batch = toCreate.slice(i, i + BATCH_SIZE);
+      const ticketsToInsert = batch.map(item => item.ticket);
+
+      const { error } = await supabase
+        .from('tickets')
+        .insert(ticketsToInsert);
+
+      if (error) {
+        errors.push(`Erro ao criar registros: ${error.message}`);
+      } else {
+        newRecords += batch.length;
+      }
+    }
+
+    for (const item of toUpdate) {
+      if (!item.existingTicket) continue;
+
+      const updates: Partial<Ticket> = {
+        driver_name: item.ticket.driver_name,
+        station: item.ticket.station,
+        pnr_value: item.ticket.pnr_value,
+        original_status: item.ticket.original_status,
+        sla_deadline: item.ticket.sla_deadline,
+        updated_at: new Date().toISOString()
+      };
+
+      if (item.ticket.spxtn && !item.existingTicket.spxtn) {
+        updates.spxtn = item.ticket.spxtn;
+      }
+
+      const { error } = await supabase
+        .from('tickets')
+        .update(updates)
+        .eq('ticket_id', item.existingTicket.ticket_id);
+
+      if (error) {
+        errors.push(`Erro ao atualizar ${item.ticket.ticket_id}: ${error.message}`);
+      } else {
+        updatedRecords++;
+      }
+    }
+
+    return {
+      success: errors.length === 0,
+      totalProcessed: previewItems.length,
+      newRecords,
+      updatedRecords,
+      skippedRecords: previewItems.filter(item => item.operation === 'skip').length,
+      errors
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      totalProcessed: previewItems.length,
+      newRecords,
+      updatedRecords,
+      skippedRecords: previewItems.filter(item => item.operation === 'skip').length,
+      errors: [error.message || 'Erro desconhecido']
+    };
+  }
+};
+
+export const saveImportLog = async (
+  fileName: string,
+  result: ImportResult,
+  previewItems: ImportPreviewItem[]
+): Promise<number | null> => {
+  if (!supabase) throw new Error("Supabase client not initialized");
+
+  const details = {
+    items: previewItems.map(item => ({
+      ticket_id: item.ticket.ticket_id,
+      operation: item.operation,
+      changes: item.changes,
+      error: item.error
+    })),
+    errors: result.errors
+  };
+
+  const { data, error } = await supabase
+    .from('import_logs')
+    .insert({
+      file_name: fileName,
+      total_rows: result.totalProcessed,
+      new_records: result.newRecords,
+      updated_records: result.updatedRecords,
+      skipped_records: result.skippedRecords,
+      details
+    })
+    .select('id')
+    .single();
+
+  if (error) {
+    console.error('Erro ao salvar log:', error);
+    return null;
+  }
+
+  return data?.id || null;
+};
+
+export const fetchImportLogs = async (page: number = 1, pageSize: number = 10): Promise<{ logs: ImportLog[], count: number }> => {
+  if (!supabase) throw new Error("Supabase client not initialized");
+
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  const { data, count, error } = await supabase
+    .from('import_logs')
+    .select('*', { count: 'exact' })
+    .order('import_date', { ascending: false })
+    .range(from, to);
+
+  if (error) throw error;
+
+  return {
+    logs: (data as ImportLog[]) || [],
+    count: count || 0
+  };
 };
