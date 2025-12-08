@@ -1,0 +1,5 @@
+{
+  "name": "Logística Manager Pro",
+  "description": "A comprehensive dashboard for logistics delivery management, featuring CSV import with smart upsert, real-time Supabase updates, and interactive data visualization.",
+  "requestFramePermissions": []
+}
