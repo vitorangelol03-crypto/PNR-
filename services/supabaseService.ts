@@ -42,6 +42,8 @@ interface FetchParams {
   pageSize: number;
   searchTerm?: string;
   filters?: ColumnFilters;
+  sortBy?: 'sla_deadline' | 'internal_status_updated_at';
+  sortOrder?: 'asc' | 'desc';
 }
 
 export interface SearchResult {
@@ -54,7 +56,9 @@ export const fetchTicketsPaginated = async ({
   page,
   pageSize,
   searchTerm,
-  filters
+  filters,
+  sortBy = 'sla_deadline',
+  sortOrder = 'asc'
 }: FetchParams): Promise<{ data: Ticket[], count: number, searchResult?: SearchResult }> => {
   if (!supabase) throw new Error("Supabase client not initialized");
   
@@ -195,9 +199,17 @@ export const fetchTicketsPaginated = async ({
   }
 
   // Ordenação e Paginação
-  const { data, count, error } = await query
-    .order('sla_deadline', { ascending: true })
-    .range(from, to);
+  let orderedQuery = query;
+
+  if (sortBy === 'internal_status_updated_at') {
+    // Ordenar por data de atualização (nulls no final)
+    orderedQuery = query.order('internal_status_updated_at', { ascending: sortOrder === 'asc', nullsFirst: false });
+  } else {
+    // Ordenar por SLA deadline (padrão)
+    orderedQuery = query.order('sla_deadline', { ascending: sortOrder === 'asc' });
+  }
+
+  const { data, count, error } = await orderedQuery.range(from, to);
 
   if (error) throw error;
 
@@ -328,6 +340,11 @@ export const fetchUniqueDrivers = async (): Promise<string[]> => {
 export const updateTicketInternal = async (id: string, updates: Partial<Ticket>) => {
   if (!supabase) throw new Error("Supabase client not initialized");
 
+  // Se está atualizando internal_status, também atualizar o timestamp
+  if (updates.internal_status !== undefined) {
+    updates.internal_status_updated_at = new Date().toISOString();
+  }
+
   const { error } = await supabase
     .from('tickets')
     .update(updates)
@@ -395,7 +412,10 @@ export const updateMultipleTicketsStatus = async (ticketIds: string[], newStatus
 
   const { error } = await supabase
     .from('tickets')
-    .update({ internal_status: newStatus })
+    .update({
+      internal_status: newStatus,
+      internal_status_updated_at: new Date().toISOString()
+    })
     .in('ticket_id', ticketIds);
 
   if (error) throw error;

@@ -25,7 +25,7 @@ const formatDriverName = (name: string) => {
 const translateStatus = (status: string) => {
   if (!status) return 'Desconhecido';
   const s = status.toLowerCase();
-  
+
   if (s.includes('reversed')) return 'Devolvido';
   if (s.includes('returned')) return 'Devolvido';
   if (s.includes('forbilling')) return 'Faturamento';
@@ -34,8 +34,24 @@ const translateStatus = (status: string) => {
   if (s.includes('pending driver reply')) return 'Aguard. Resp.';
   if (s.includes('review driver reply')) return 'Análise Resp.';
   if (s.includes('cancelled')) return 'Cancelado';
-  
+
   return status;
+};
+
+const formatStatusUpdateDate = (dateString?: string) => {
+  if (!dateString) return null;
+
+  try {
+    const date = new Date(dateString);
+    const day = date.getDate().toString().padStart(2, '0');
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+
+    return `${day}/${month} ${hours}:${minutes}`;
+  } catch {
+    return null;
+  }
 };
 
 // Default statuses to ensure the filter dropdown is never empty
@@ -69,6 +85,10 @@ export const Dashboard: React.FC = () => {
   const [page, setPage] = useState(1);
   const [pageSize] = useState(50);
   const [totalCount, setTotalCount] = useState(0);
+
+  // Sorting States
+  const [sortBy, setSortBy] = useState<'sla_deadline' | 'internal_status_updated_at'>('sla_deadline');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
   // Date Filter States
   const [periodType, setPeriodType] = useState<'all' | 'last5' | 'last10' | 'last15' | 'last20' | 'last30' | 'custom'>('all');
@@ -183,7 +203,9 @@ export const Dashboard: React.FC = () => {
         page,
         pageSize,
         searchTerm: debouncedSearch,
-        filters: debouncedColFilters
+        filters: debouncedColFilters,
+        sortBy,
+        sortOrder
       });
       setTickets(data);
       setTotalCount(count);
@@ -211,7 +233,7 @@ export const Dashboard: React.FC = () => {
       setLoadingTable(false);
       setLoading(false); // Initial load done
     }
-  }, [page, pageSize, debouncedSearch, debouncedColFilters]);
+  }, [page, pageSize, debouncedSearch, debouncedColFilters, sortBy, sortOrder]);
 
   // Initial Load
   useEffect(() => {
@@ -255,7 +277,8 @@ export const Dashboard: React.FC = () => {
   const handleInternalStatusChange = async (id: string, newStatus: string) => {
     try {
       // Optimistic Update
-      setTickets(prev => prev.map(t => t.ticket_id === id ? { ...t, internal_status: newStatus } : t));
+      const now = new Date().toISOString();
+      setTickets(prev => prev.map(t => t.ticket_id === id ? { ...t, internal_status: newStatus, internal_status_updated_at: now } : t));
       await updateTicketInternal(id, { internal_status: newStatus });
     } catch (err) {
       console.error("Failed to update status", err);
@@ -507,7 +530,8 @@ export const Dashboard: React.FC = () => {
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col">
           {/* Top Bar - Global Search */}
           <div className="p-4 border-b border-gray-100 bg-gray-50/50 rounded-t-xl">
-             <div className="relative w-full max-w-2xl">
+            <div className="flex gap-3 items-start">
+              <div className="relative flex-1 max-w-2xl">
                 <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
                 <textarea
                   placeholder="Pesquisa Global (cole múltiplos códigos, um por linha)..."
@@ -530,7 +554,27 @@ export const Dashboard: React.FC = () => {
                     <X className="w-4 h-4" />
                   </button>
                 )}
-             </div>
+              </div>
+
+              {/* Sort Controls */}
+              <div className="flex gap-2">
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as 'sla_deadline' | 'internal_status_updated_at')}
+                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  <option value="sla_deadline">Ordenar por Prazo</option>
+                  <option value="internal_status_updated_at">Ordenar por Atualização</option>
+                </select>
+                <button
+                  onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  title={sortOrder === 'asc' ? 'Crescente' : 'Decrescente'}
+                >
+                  {sortOrder === 'asc' ? '↑' : '↓'}
+                </button>
+              </div>
+            </div>
              {searchTerm && parseTrackingCodes(searchTerm).length > 1 && (
                <div className="mt-2 flex items-center gap-2">
                  <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-700 text-xs font-medium px-2.5 py-1 rounded-full">
@@ -735,18 +779,26 @@ export const Dashboard: React.FC = () => {
                         </div>
                       </td>
                       <td className="px-6 py-3">
-                        <select 
-                          value={ticket.internal_status || 'Pendente'}
-                          onChange={(e) => handleInternalStatusChange(ticket.ticket_id, e.target.value)}
-                          className={`text-xs font-medium rounded-full px-3 py-1 border-0 focus:ring-2 cursor-pointer transition-colors
-                            ${ticket.internal_status === 'Concluído' ? 'bg-green-100 text-green-700 focus:ring-green-500' :
-                              ticket.internal_status === 'Em Análise' ? 'bg-yellow-100 text-yellow-700 focus:ring-yellow-500' :
-                              'bg-gray-100 text-gray-600 focus:ring-gray-400'}`}
-                        >
-                          <option value="Pendente">Pendente</option>
-                          <option value="Em Análise">Em Análise</option>
-                          <option value="Concluído">Concluído</option>
-                        </select>
+                        <div className="flex flex-col gap-1">
+                          <select
+                            value={ticket.internal_status || 'Pendente'}
+                            onChange={(e) => handleInternalStatusChange(ticket.ticket_id, e.target.value)}
+                            className={`text-xs font-medium rounded-full px-3 py-1 border-0 focus:ring-2 cursor-pointer transition-colors
+                              ${ticket.internal_status === 'Concluído' ? 'bg-green-100 text-green-700 focus:ring-green-500' :
+                                ticket.internal_status === 'Em Análise' ? 'bg-yellow-100 text-yellow-700 focus:ring-yellow-500' :
+                                'bg-gray-100 text-gray-600 focus:ring-gray-400'}`}
+                          >
+                            <option value="Pendente">Pendente</option>
+                            <option value="Em Análise">Em Análise</option>
+                            <option value="Concluído">Concluído</option>
+                          </select>
+                          <div className="flex items-center gap-1 text-xs text-gray-500">
+                            <Clock className="w-3 h-3" />
+                            <span>
+                              {formatStatusUpdateDate(ticket.internal_status_updated_at) || 'Não movimentado'}
+                            </span>
+                          </div>
+                        </div>
                       </td>
                       <td className="px-6 py-3">
                         <input 

@@ -1,7 +1,23 @@
 import React, { useState } from 'react';
-import { X, Check, AlertCircle, Loader2 } from 'lucide-react';
+import { X, Check, AlertCircle, Loader2, Clock } from 'lucide-react';
 import { Ticket } from '../types';
 import { parseTrackingCodes, fetchTicketsByTrackingCodes, updateMultipleTicketsStatus } from '../services/supabaseService';
+
+const formatStatusUpdateDate = (dateString?: string) => {
+  if (!dateString) return null;
+
+  try {
+    const date = new Date(dateString);
+    const day = date.getDate().toString().padStart(2, '0');
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+
+    return `${day}/${month} ${hours}:${minutes}`;
+  } catch {
+    return null;
+  }
+};
 
 interface BulkStatusModalProps {
   isOpen: boolean;
@@ -242,6 +258,7 @@ export const BulkStatusModal: React.FC<BulkStatusModalProps> = ({ isOpen, onClos
                           <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Sel.</th>
                           <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Código</th>
                           <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status Atual</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Última Atualização</th>
                           <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Novo Status</th>
                         </tr>
                       </thead>
@@ -263,6 +280,14 @@ export const BulkStatusModal: React.FC<BulkStatusModalProps> = ({ isOpen, onClos
                               <span className={`text-xs font-medium px-2 py-1 rounded-full ${getStatusColor(ticket.internal_status || 'Pendente')}`}>
                                 {ticket.internal_status || 'Pendente'}
                               </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-1 text-xs text-gray-600">
+                                <Clock className="w-3 h-3" />
+                                <span>
+                                  {formatStatusUpdateDate(ticket.internal_status_updated_at) || 'Não movimentado'}
+                                </span>
+                              </div>
                             </td>
                             <td className="px-4 py-3">
                               {selectedStatus && selectedTicketIds.has(ticket.ticket_id) ? (

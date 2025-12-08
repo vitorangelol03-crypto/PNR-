@@ -49,6 +49,10 @@ Sistema de gerenciamento logístico que permite visualizar dados através de um 
 - [x] Pesquisa em massa por múltiplos códigos de rastreio
 - [x] Feedback visual de códigos encontrados e não encontrados
 - [x] Atualização em massa de status interno com modal dedicado
+- [x] Rastreamento de data/hora de atualização do status interno
+- [x] Exibição formatada de data/hora de última atualização (DD/MM HH:mm)
+- [x] Sistema de ordenação por prazo SLA ou por data de atualização
+- [x] Indicação visual de tickets "Não movimentados"
 
 ### Configuração Atual
 - **Supabase URL**: https://rmaiejrslwbbizviqejx.supabase.co (hardcoded como fallback)
@@ -216,6 +220,76 @@ Sistema de gerenciamento logístico que permite visualizar dados através de um 
 - **Motivo**: Permitir atualização rápida do status interno de múltiplos tickets simultaneamente, economizando tempo ao processar lotes de pedidos
 - **Status**: Concluído
 - **Resultado**: Usuários podem agora colar múltiplos códigos de rastreio, visualizar quais foram encontrados, selecionar um novo status e atualizar todos de uma vez. O sistema fornece feedback claro em cada etapa e atualiza automaticamente o dashboard após conclusão
+
+### 2025-12-08 - Implementação de Data/Hora de Atualização de Status Interno
+- **Modificações**:
+  1. **Banco de Dados**:
+     - Criada migration completa incluindo tabela `tickets` com todas as colunas necessárias
+     - Adicionada coluna `internal_status_updated_at` (tipo timestamptz) para armazenar data/hora da última atualização do status interno
+     - Criado índice `idx_tickets_internal_status_updated_at` com ordenação DESC e NULLS LAST para otimizar consultas
+     - Configurado RLS (Row Level Security) com políticas públicas
+
+  2. **Interface TypeScript**:
+     - Adicionado campo `internal_status_updated_at?: string` na interface `Ticket` em `types.ts`
+
+  3. **Serviço Supabase**:
+     - Modificada função `updateTicketInternal()` para atualizar automaticamente `internal_status_updated_at` quando `internal_status` é alterado
+     - Modificada função `updateMultipleTicketsStatus()` para incluir timestamp em atualizações em massa
+     - Adicionados parâmetros `sortBy` e `sortOrder` na interface `FetchParams`
+     - Implementada lógica de ordenação dinâmica em `fetchTicketsPaginated()` suportando ordenação por SLA deadline ou por data de atualização
+
+  4. **Dashboard - Exibição de Data**:
+     - Criada função utilitária `formatStatusUpdateDate()` para formatar datas no padrão "DD/MM HH:mm"
+     - Modificada coluna "Controle Interno" para exibir:
+       - Dropdown de status
+       - Ícone de relógio + data formatada abaixo
+       - Texto "Não movimentado" quando não há data de atualização
+     - Atualização otimista modificada para incluir timestamp ao alterar status
+
+  5. **Dashboard - Sistema de Ordenação**:
+     - Adicionados estados `sortBy` e `sortOrder` no Dashboard
+     - Criado dropdown para escolher critério de ordenação: "Ordenar por Prazo" ou "Ordenar por Atualização"
+     - Adicionado botão de toggle para alternar entre ordem crescente (↑) e decrescente (↓)
+     - Controles de ordenação posicionados ao lado da barra de pesquisa global
+     - Integrado sistema de ordenação com paginação e filtros existentes
+
+  6. **Modal de Atualização em Massa**:
+     - Importada função `formatStatusUpdateDate()` e ícone `Clock`
+     - Adicionada coluna "Última Atualização" na tabela de confirmação
+     - Exibição da data/hora de última atualização ou "Não movimentado" para cada ticket
+
+- **Arquivos Afetados**:
+  - **Novo**: Migration `create_tickets_table` no Supabase
+  - `types.ts`: Adicionado campo `internal_status_updated_at` na interface Ticket
+  - `services/supabaseService.ts`:
+    - Modificadas funções `updateTicketInternal()` e `updateMultipleTicketsStatus()`
+    - Adicionados parâmetros de ordenação em `FetchParams`
+    - Implementada lógica de ordenação dinâmica
+  - `components/Dashboard.tsx`:
+    - Criada função `formatStatusUpdateDate()`
+    - Adicionados estados de ordenação (`sortBy`, `sortOrder`)
+    - Modificada coluna "Controle Interno" para exibir data
+    - Adicionados controles de ordenação na UI
+    - Atualizada função `loadTableData()` para usar parâmetros de ordenação
+  - `components/BulkStatusModal.tsx`:
+    - Importada função `formatStatusUpdateDate()` e ícone `Clock`
+    - Adicionada coluna "Última Atualização" na tabela
+
+- **Formato de Exibição**: "DD/MM HH:mm" (exemplo: "08/12 14:35")
+- **Comportamento**: Tickets sem data de atualização mostram "Não movimentado"
+
+- **Motivo**: Fornecer rastreabilidade completa das alterações de status interno, permitindo aos usuários visualizar quando cada pacote foi movimentado pela última vez e ordenar a lista por essa informação
+
+- **Status**: Concluído
+
+- **Resultado**:
+  - Cada ticket agora exibe data e hora exata da última atualização do status interno
+  - Formato compacto e legível (DD/MM HH:mm)
+  - Tickets não movimentados são claramente identificados
+  - Sistema de ordenação flexível permite visualizar tickets por prazo SLA ou por data de atualização
+  - Modal de atualização em massa mostra histórico de cada ticket
+  - Todas as atualizações (individuais e em massa) registram timestamp automaticamente
+  - Build executado com sucesso (795KB)
 
 ## Decisões Técnicas
 

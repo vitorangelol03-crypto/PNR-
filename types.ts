@@ -10,6 +10,7 @@ export interface Ticket {
   sla_deadline: string;
   internal_status: string; // "Pendente", "Em Análise", "Concluído"
   internal_notes: string;
+  internal_status_updated_at?: string; // Data/hora da última atualização do status interno
   updated_at?: string;
 }
 
