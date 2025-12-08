@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { getSupabase, fetchTicketsPaginated, fetchDashboardStats, fetchUniqueDrivers, updateTicketInternal, ColumnFilters } from '../services/supabaseService';
+import { getSupabase, fetchTicketsPaginated, fetchDashboardStats, fetchUniqueDrivers, updateTicketInternal, ColumnFilters, parseTrackingCodes } from '../services/supabaseService';
 import { Ticket, KpiStats } from '../types';
 import { ImportModal } from './ImportModal';
 import { 
@@ -496,17 +496,39 @@ export const Dashboard: React.FC = () => {
         {/* Data Table Section */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col">
           {/* Top Bar - Global Search */}
-          <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50 rounded-t-xl">
-             <div className="relative w-full max-w-md">
+          <div className="p-4 border-b border-gray-100 bg-gray-50/50 rounded-t-xl">
+             <div className="relative w-full max-w-2xl">
                 <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
-                <input 
-                  type="text" 
-                  placeholder="Pesquisa Global..." 
-                  className="pl-10 w-full border border-gray-200 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                <textarea
+                  placeholder="Pesquisa Global (cole múltiplos códigos, um por linha)..."
+                  className="pl-10 pr-10 w-full border border-gray-200 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-none"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
+                  rows={1}
+                  style={{ minHeight: '38px', maxHeight: '150px' }}
+                  onInput={(e) => {
+                    const target = e.target as HTMLTextAreaElement;
+                    target.style.height = 'auto';
+                    target.style.height = Math.min(target.scrollHeight, 150) + 'px';
+                  }}
                 />
+                {searchTerm && (
+                  <button
+                    onClick={() => setSearchTerm('')}
+                    className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
              </div>
+             {searchTerm && parseTrackingCodes(searchTerm).length > 1 && (
+               <div className="mt-2 flex items-center gap-2">
+                 <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-700 text-xs font-medium px-2.5 py-1 rounded-full">
+                   <Filter className="w-3 h-3" />
+                   Buscando {parseTrackingCodes(searchTerm).length} códigos de rastreio
+                 </span>
+               </div>
+             )}
           </div>
 
           {/* Table Content */}
@@ -526,13 +548,26 @@ export const Dashboard: React.FC = () => {
                 {/* Linha de Filtros */}
                 <tr className="bg-gray-100/50 border-b border-gray-200">
                    <td className="px-2 py-2">
-                     <input 
-                       type="text" 
-                       placeholder="Filtrar Rastreio/ID"
-                       className="w-full text-xs px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 outline-none"
-                       value={colFilters.tracking}
-                       onChange={(e) => handleColFilterChange('tracking', e.target.value)}
-                     />
+                     <div className="relative">
+                       <textarea
+                         placeholder="Filtrar Rastreio/ID (múltiplos)"
+                         className="w-full text-xs px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 outline-none resize-none"
+                         value={colFilters.tracking}
+                         onChange={(e) => handleColFilterChange('tracking', e.target.value)}
+                         rows={1}
+                         style={{ minHeight: '32px', maxHeight: '100px' }}
+                         onInput={(e) => {
+                           const target = e.target as HTMLTextAreaElement;
+                           target.style.height = 'auto';
+                           target.style.height = Math.min(target.scrollHeight, 100) + 'px';
+                         }}
+                       />
+                       {colFilters.tracking && parseTrackingCodes(colFilters.tracking).length > 1 && (
+                         <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                           {parseTrackingCodes(colFilters.tracking).length}
+                         </span>
+                       )}
+                     </div>
                    </td>
                    <td className="px-2 py-2">
                      <input 

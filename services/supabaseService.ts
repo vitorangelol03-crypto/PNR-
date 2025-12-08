@@ -15,6 +15,18 @@ export const initSupabase = (config: SupabaseConfig) => {
 
 export const getSupabase = () => supabase;
 
+// --- FUNÇÃO UTILITÁRIA: Parse de Múltiplos Códigos de Rastreio ---
+export const parseTrackingCodes = (input: string): string[] => {
+  if (!input || input.trim() === '') return [];
+
+  const codes = input
+    .split('\n')
+    .map(code => code.trim())
+    .filter(code => code.length > 0);
+
+  return codes.slice(0, 50);
+};
+
 // --- OTIMIZAÇÃO: Busca Paginada (Server-side Pagination) ---
 export interface ColumnFilters {
   tracking?: string;
@@ -49,28 +61,69 @@ export const fetchTicketsPaginated = async ({
 
   // 1. Busca Global (Barra Superior)
   if (searchTerm && searchTerm.trim() !== '') {
-    const term = searchTerm.trim();
-    // Verifica se é número para decidir a estratégia de busca no ticket_id (BigInt)
-    // O PostgREST falha se tentarmos 'ilike' em coluna numérica sem cast, e falha se usarmos cast '::text' na URL.
-    // Estratégia: Se numérico, busca ID exato OU texto parcial nos outros. Se texto, ignora ID.
-    const isNumeric = /^\d+$/.test(term);
+    const codes = parseTrackingCodes(searchTerm);
 
-    if (isNumeric) {
-      query = query.or(`ticket_id.eq.${term},station.ilike.%${term}%,spxtn.ilike.%${term}%`);
+    if (codes.length > 1) {
+      const numericCodes = codes.filter(c => /^\d+$/.test(c));
+      const textCodes = codes.filter(c => !/^\d+$/.test(c));
+
+      const conditions: string[] = [];
+
+      if (textCodes.length > 0) {
+        conditions.push(`spxtn.in.(${textCodes.join(',')})`);
+      }
+
+      if (numericCodes.length > 0) {
+        conditions.push(`ticket_id.in.(${numericCodes.join(',')})`);
+        conditions.push(`spxtn.in.(${numericCodes.join(',')})`);
+      }
+
+      if (conditions.length > 0) {
+        query = query.or(conditions.join(','));
+      }
     } else {
-      query = query.or(`station.ilike.%${term}%,spxtn.ilike.%${term}%`);
+      const term = searchTerm.trim();
+      const isNumeric = /^\d+$/.test(term);
+
+      if (isNumeric) {
+        query = query.or(`ticket_id.eq.${term},station.ilike.%${term}%,spxtn.ilike.%${term}%`);
+      } else {
+        query = query.or(`station.ilike.%${term}%,spxtn.ilike.%${term}%`);
+      }
     }
   }
 
   // 2. Filtros por Coluna (Inputs da Tabela)
   if (filters) {
     if (filters.tracking) {
-      const t = filters.tracking.trim();
-      const isNum = /^\d+$/.test(t);
-      if (isNum) {
-        query = query.or(`ticket_id.eq.${t},spxtn.ilike.%${t}%`);
+      const codes = parseTrackingCodes(filters.tracking);
+
+      if (codes.length > 1) {
+        const numericCodes = codes.filter(c => /^\d+$/.test(c));
+        const textCodes = codes.filter(c => !/^\d+$/.test(c));
+
+        const conditions: string[] = [];
+
+        if (textCodes.length > 0) {
+          conditions.push(`spxtn.in.(${textCodes.join(',')})`);
+        }
+
+        if (numericCodes.length > 0) {
+          conditions.push(`ticket_id.in.(${numericCodes.join(',')})`);
+          conditions.push(`spxtn.in.(${numericCodes.join(',')})`);
+        }
+
+        if (conditions.length > 0) {
+          query = query.or(conditions.join(','));
+        }
       } else {
-        query = query.ilike('spxtn', `%${t}%`);
+        const t = filters.tracking.trim();
+        const isNum = /^\d+$/.test(t);
+        if (isNum) {
+          query = query.or(`ticket_id.eq.${t},spxtn.ilike.%${t}%`);
+        } else {
+          query = query.ilike('spxtn', `%${t}%`);
+        }
       }
     }
 

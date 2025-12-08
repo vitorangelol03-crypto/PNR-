@@ -128,6 +128,32 @@ Sistema de gerenciamento logístico que permite visualizar dados através de um 
 - **Status**: Concluído
 - **Resultado**: Interface de filtro mais intuitiva com opções predefinidas e feedback visual do período selecionado
 
+### 2025-12-08 - Implementação de Pesquisa em Massa por Códigos de Rastreio
+- **Modificações**:
+  - Substituído campo de input de pesquisa global por textarea expansível que aceita múltiplas linhas
+  - Criada função utilitária `parseTrackingCodes()` para processar múltiplos códigos separados por quebra de linha
+  - Modificada função `fetchTicketsPaginated()` no serviço Supabase para detectar e processar pesquisas em massa
+  - Implementada lógica usando operador `.in()` do Supabase quando há múltiplos códigos
+  - Adicionado indicador visual mostrando quantidade de códigos detectados
+  - Implementada mesma funcionalidade no filtro de coluna "Rastreio/ID"
+  - Adicionado badge informativo quando pesquisa em massa está ativa
+  - Incluído botão de limpar pesquisa
+  - Limitação de 50 códigos por busca para garantir performance
+- **Arquivos Afetados**:
+  - `components/Dashboard.tsx`:
+    - Substituído input por textarea na pesquisa global (linhas ~500-510)
+    - Adicionado indicador de códigos detectados
+    - Implementado mesmo sistema no filtro de coluna
+    - Adicionado feedback visual com badges
+  - `services/supabaseService.ts`:
+    - Criada função `parseTrackingCodes()` para processar entrada
+    - Modificada lógica de busca em `fetchTicketsPaginated()` (linhas ~50-75)
+    - Adicionada detecção de múltiplos códigos via quebra de linha
+    - Implementado uso de `.in()` para arrays de códigos
+- **Motivo**: Aumentar produtividade permitindo buscar múltiplos pedidos simultaneamente ao colar códigos de planilhas
+- **Status**: Concluído
+- **Resultado**: Usuários podem agora colar múltiplos códigos de rastreio (separados por quebra de linha) e o sistema busca todos simultaneamente
+
 ## Decisões Técnicas
 
 ### 2025-12-08 - Estrutura de Arquivos Duplicada (RESOLVIDO)
