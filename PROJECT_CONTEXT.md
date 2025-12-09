@@ -29,6 +29,7 @@ Sistema de gerenciamento logístico que permite visualizar dados através de um 
 ├── PROJECT_CONTEXT.md              # Arquivo de contexto do projeto
 ├── /components
 │   ├── Dashboard.tsx               # Dashboard principal com KPIs e tabela
+│   ├── LoginScreen.tsx             # Tela de autenticação diária com senha
 │   ├── ConnectionModal.tsx         # Modal de conexão com Supabase
 │   ├── ImportModal.tsx             # Modal de importação de dados CSV
 │   ├── BulkStatusModal.tsx         # Modal de atualização em massa de status interno
@@ -42,6 +43,9 @@ Sistema de gerenciamento logístico que permite visualizar dados através de um 
 ## Estado Atual do Projeto
 
 ### Funcionalidades Implementadas
+- [x] Sistema de autenticação diária com senha (684171)
+- [x] Verificação automática via localStorage (uma senha por dia)
+- [x] Tela de login elegante e responsiva
 - [x] Conexão com Supabase (manual e via variáveis de ambiente)
 - [x] Modal de conexão customizável
 - [x] Dashboard principal com KPIs e gráficos
@@ -77,6 +81,34 @@ Sistema de gerenciamento logístico que permite visualizar dados através de um 
 - **Banco de Dados**: Tabelas `tickets` e `import_logs` criadas com RLS habilitado
 
 ## Histórico de Alterações
+
+### 2025-12-09 - Sistema de Autenticação Diária com Senha
+- **Modificações**:
+  1. Criado novo componente `LoginScreen.tsx`:
+     - Tela fullscreen com gradiente azul-verde
+     - Logo "CD LOGISTICA" grande e centralizado
+     - Input de senha estilizado e centralizado
+     - Validação de senha (684171)
+     - Animações de erro (shake) e feedback visual
+     - Design responsivo e moderno
+  2. Modificado `App.tsx`:
+     - Adicionado estado `isAuthenticated`
+     - Implementada verificação de autenticação via localStorage
+     - Verificação de data (YYYY-MM-DD) para autenticação diária
+     - Fluxo: LoginScreen → ConnectionModal → Dashboard
+     - useEffect separado para verificação diária
+  3. Implementado sistema de armazenamento local:
+     - Chave: `cd_logistica_auth`
+     - Armazena data, status de autenticação e timestamp
+     - Comparação automática com data atual
+     - Permite acesso sem nova senha no mesmo dia
+- **Arquivos Afetados**:
+  - `components/LoginScreen.tsx`: Criado
+  - `App.tsx`: Modificado (lógica de autenticação)
+  - `PROJECT_CONTEXT.md`: Atualizado
+- **Motivo**: Adicionar camada de segurança com senha diária para controle de acesso ao sistema
+- **Status**: Concluído
+- **Resultado**: Sistema solicita senha 684171 no primeiro acesso do dia. Ao recarregar a página no mesmo dia, o usuário não precisa digitar a senha novamente. Design elegante com gradiente e animações suaves.
 
 ### 2025-12-09 - Criação das Tabelas do Banco de Dados no Supabase
 - **Modificações**:

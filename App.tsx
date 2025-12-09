@@ -1,15 +1,38 @@
 import React, { useState, useEffect } from 'react';
 import { Dashboard } from './components/Dashboard';
 import { ConnectionModal } from './components/ConnectionModal';
+import { LoginScreen } from './components/LoginScreen';
 import { initSupabase } from './services/supabaseService';
 import { SupabaseConfig } from './types';
 
 function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
 
-  // Attempt to connect via env vars if available (auto-connect)
   useEffect(() => {
+    const checkDailyAuth = () => {
+      try {
+        const authData = localStorage.getItem('cd_logistica_auth');
+        if (authData) {
+          const { date } = JSON.parse(authData);
+          const today = new Date().toISOString().split('T')[0];
+          if (date === today) {
+            setIsAuthenticated(true);
+            return true;
+          }
+        }
+      } catch (error) {
+        console.error('Erro ao verificar autenticação:', error);
+      }
+      return false;
+    };
+
+    checkDailyAuth();
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
     // Use current project credentials as default
     let envUrl = "https://vjkjusmzvxdzdeogmqdx.supabase.co";
     let envKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZqa2p1c216dnhkemRlb2dtcWR4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyMTg4NjAsImV4cCI6MjA4MDc5NDg2MH0.yLNq6sJ6Q32IdeUKhBd2Xx5YPC_we0U4GKwaUjMBcBc";
@@ -49,7 +72,7 @@ function App() {
     } else {
       setConnectionError("Credenciais do Supabase não encontradas.");
     }
-  }, []);
+  }, [isAuthenticated]);
 
   const handleManualConnect = (config: SupabaseConfig) => {
     try {
@@ -68,6 +91,14 @@ function App() {
       alert(errorMsg);
     }
   };
+
+  const handleAuthenticate = () => {
+    setIsAuthenticated(true);
+  };
+
+  if (!isAuthenticated) {
+    return <LoginScreen onAuthenticate={handleAuthenticate} />;
+  }
 
   if (!isConnected) {
     return <ConnectionModal onConnect={handleManualConnect} error={connectionError} />;
