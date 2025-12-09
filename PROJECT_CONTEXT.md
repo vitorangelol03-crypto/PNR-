@@ -1327,6 +1327,115 @@ Sistema de gerenciamento logístico que permite visualizar dados através de um 
   - Build executado com sucesso (828.32 KB)
   - Funcionalidade pronta para uso em produção
 
+### 2025-12-09 - Implementação de Filtro de Motorista na Área dos Gráficos
+- **Modificações**:
+  1. **Serviço Supabase - fetchDashboardStats**:
+     - Adicionado terceiro parâmetro opcional `driverName?: string`
+     - Implementado filtro `.eq('driver_name', driverName)` na query quando motorista é selecionado
+     - Filtro aplicado em conjunto com filtros de data existentes
+     - Funciona no loop de batching de 1000 registros
+
+  2. **Estado no Dashboard**:
+     - Adicionado estado `selectedDriver: string` (vazio = todos os motoristas)
+     - Inicializado com string vazia (comportamento padrão: mostrar todos)
+     - Posicionado após estados de filtro de data para organização lógica
+
+  3. **Integração com loadStats**:
+     - Modificada função `loadStats()` para passar `selectedDriver` ao `fetchDashboardStats`
+     - Conversão de string vazia para undefined: `selectedDriver || undefined`
+     - Garantia de compatibilidade com assinatura da função
+
+  4. **Recarregamento Automático**:
+     - Adicionado `selectedDriver` nas dependências do useEffect de filtros
+     - Stats são recarregados automaticamente quando motorista muda
+     - Integrado com recarregamento por mudança de período
+
+  5. **Interface do Usuário - Filtro de Motorista**:
+     - Nova seção criada entre KPIs e gráficos
+     - Card branco com borda e sombra seguindo design do sistema
+     - Dropdown/select estilizado com:
+       - Primeira opção: "Todos os Motoristas" (value="")
+       - Lista completa de motoristas do array `uniqueDrivers`
+       - Formatação de nomes usando `formatDriverName()` para remover códigos [12345]
+     - Ícone Filter ao lado do label
+     - Botão "Limpar Filtro" (vermelho) aparece quando motorista está selecionado
+     - Layout responsivo com flex-wrap
+
+  6. **Feedback Visual**:
+     - Mensagem informativa quando motorista está selecionado:
+       - "Exibindo dados do motorista: [Nome]"
+       - Integrada com informação de período quando ambos ativos
+       - Separador visual (bullet) entre motorista e período
+     - Borda superior separando mensagem do resto do card
+     - Texto pequeno e discreto (text-xs text-gray-500)
+
+  7. **Botão "Limpar Filtros" Globalizado**:
+     - Atualizado para considerar tanto período quanto motorista
+     - Condição: `(periodType !== 'all' || selectedDriver)`
+     - Limpa ambos os filtros de uma vez:
+       - setPeriodType('all')
+       - setStartDate('')
+       - setEndDate('')
+       - setSelectedDriver('')
+
+  8. **Impacto nos KPIs e Gráficos**:
+     - **KPIs (Total Tickets, Valor Total, Pendentes)**:
+       - Refletem apenas dados do motorista selecionado
+       - Calculados a partir dos tickets filtrados
+     - **Gráfico "Status das Entregas"**:
+       - Mostra distribuição de status apenas do motorista
+       - Mantém cores e formatação originais
+     - **Gráfico "Top 5 Motoristas"**:
+       - Quando motorista específico: mostra apenas ele
+       - Quando "Todos": mostra top 5 normal
+       - Formatação de nomes mantida com `formatDriverName()`
+
+- **Arquivos Modificados**:
+  - `services/supabaseService.ts`:
+    - Linha 370: Assinatura de `fetchDashboardStats` atualizada com terceiro parâmetro
+    - Linhas 392-395: Adicionado filtro condicional por motorista na query
+
+  - `components/Dashboard.tsx`:
+    - Linhas 102-103: Adicionado estado `selectedDriver`
+    - Linha 175: Passado `selectedDriver` para `fetchDashboardStats`
+    - Linha 255: Adicionado `selectedDriver` nas dependências do useEffect
+    - Linhas 439-452: Atualizada condição e lógica do botão "Limpar Filtros"
+    - Linhas 497-548: Nova seção de filtro de motorista com UI completa
+
+- **Funcionalidade**:
+  - Permite análise focada por motorista individual
+  - Visualização de performance específica
+  - Identificação de padrões de entregas por pessoa
+  - Integração perfeita com filtros de período existentes
+  - Experiência consistente com resto do dashboard
+
+- **Especificações Técnicas**:
+  - Query Supabase: `.eq('driver_name', driverName)` quando aplicável
+  - Filtro combinado: data + motorista funcionam juntos
+  - Formatação: `formatDriverName()` remove padrão [12345]
+  - Estado vazio ('') = comportamento padrão (todos)
+  - Dropdown populado dinamicamente do banco
+
+- **Benefícios**:
+  - Análise granular de dados
+  - Identificação rápida de motoristas com problemas
+  - Comparação de performance individual
+  - Interface intuitiva e familiar
+  - Feedback visual claro
+
+- **Motivo**: Permitir aos usuários filtrar dados dos gráficos e KPIs por motorista específico, facilitando análise de performance individual e identificação de padrões específicos de entrega
+
+- **Status**: Concluído ✅
+
+- **Resultado**:
+  - Filtro de motorista totalmente funcional na área dos gráficos
+  - Integração perfeita com filtros de período
+  - KPIs e gráficos refletem motorista selecionado
+  - Feedback visual claro e informativo
+  - Interface consistente com design do sistema
+  - Build executado com sucesso (829.88 KB)
+  - Sistema pronto para análise por motorista
+
 ### Solicitação do Usuário
 1. Responder sempre em português
 2. Criar arquivo de contexto (MD) para registrar tudo do chat e atualizações do projeto

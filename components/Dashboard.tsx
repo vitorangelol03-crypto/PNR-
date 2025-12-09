@@ -99,6 +99,9 @@ export const Dashboard: React.FC = () => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
+  // Driver Filter State (for Charts/KPIs)
+  const [selectedDriver, setSelectedDriver] = useState('');
+
   // Global Search
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -169,7 +172,7 @@ export const Dashboard: React.FC = () => {
     try {
       const dateRange = calculateDateRange();
       const [stats, drivers] = await Promise.all([
-        fetchDashboardStats(dateRange.start, dateRange.end),
+        fetchDashboardStats(dateRange.start, dateRange.end, selectedDriver || undefined),
         fetchUniqueDrivers()
       ]);
       setKpis(stats.kpis);
@@ -245,11 +248,11 @@ export const Dashboard: React.FC = () => {
     loadStats();
   }, [supabase]);
 
-  // Reload stats when date filters change
+  // Reload stats when date filters or driver filter change
   useEffect(() => {
     if (!supabase) return;
     loadStats();
-  }, [periodType, startDate, endDate]);
+  }, [periodType, startDate, endDate, selectedDriver]);
 
   // Effect trigger for table data
   useEffect(() => {
@@ -433,12 +436,13 @@ export const Dashboard: React.FC = () => {
             )}
 
             {/* Clear Filters Button */}
-            {periodType !== 'all' && (
+            {(periodType !== 'all' || selectedDriver) && (
               <button
                 onClick={() => {
                   setPeriodType('all');
                   setStartDate('');
                   setEndDate('');
+                  setSelectedDriver('');
                 }}
                 className="flex items-center gap-1 text-xs text-red-600 hover:text-red-700 font-medium transition"
               >
@@ -490,6 +494,59 @@ export const Dashboard: React.FC = () => {
             <p className="text-3xl font-bold text-gray-800">{loading ? '...' : kpis.pendingCount}</p>
           </div>
         </div>
+
+        {/* Driver Filter for Charts/KPIs */}
+        {!loading && (
+          <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Filter className="w-4 h-4 text-gray-600" />
+                <label className="text-sm font-medium text-gray-700">Filtrar por Motorista:</label>
+              </div>
+
+              <select
+                value={selectedDriver}
+                onChange={(e) => setSelectedDriver(e.target.value)}
+                className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">Todos os Motoristas</option>
+                {uniqueDrivers.map((driver) => (
+                  <option key={driver} value={driver}>
+                    {formatDriverName(driver)}
+                  </option>
+                ))}
+              </select>
+
+              {selectedDriver && (
+                <button
+                  onClick={() => setSelectedDriver('')}
+                  className="flex items-center gap-1 text-xs text-red-600 hover:text-red-700 font-medium transition"
+                >
+                  <X className="w-3 h-3" />
+                  Limpar Filtro
+                </button>
+              )}
+            </div>
+
+            {selectedDriver && (
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <p className="text-xs text-gray-500">
+                  Exibindo dados do motorista: <span className="font-semibold">{formatDriverName(selectedDriver)}</span>
+                  {periodType !== 'all' && (
+                    <>
+                      {' '}&bull;{' '}
+                      {periodType === 'custom' && startDate && endDate ? (
+                        <>Período: {new Date(startDate).toLocaleDateString('pt-BR')} a {new Date(endDate).toLocaleDateString('pt-BR')}</>
+                      ) : periodType !== 'custom' && (
+                        <>Período: {new Date(calculateDateRange().start).toLocaleDateString('pt-BR')} a {new Date(calculateDateRange().end).toLocaleDateString('pt-BR')}</>
+                      )}
+                    </>
+                  )}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Charts Section */}
         {!loading && (

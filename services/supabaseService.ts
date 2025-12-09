@@ -367,7 +367,7 @@ export const fetchTicketsPaginated = async ({
 
 // --- OTIMIZAÇÃO: Estatísticas Leves ---
 // Baixa TODAS as linhas (em lotes) mas apenas colunas necessárias para calcular KPIs totais
-export const fetchDashboardStats = async (startDate?: string, endDate?: string): Promise<{ kpis: KpiStats, statusDist: any[], driverDist: any[] }> => {
+export const fetchDashboardStats = async (startDate?: string, endDate?: string, driverName?: string): Promise<{ kpis: KpiStats, statusDist: any[], driverDist: any[] }> => {
   if (!supabase) throw new Error("Supabase client not initialized");
 
   let allTickets: any[] = [];
@@ -387,6 +387,11 @@ export const fetchDashboardStats = async (startDate?: string, endDate?: string):
     }
     if (endDate) {
       query = query.lte('created_time', endDate);
+    }
+
+    // Apply driver filter if provided
+    if (driverName) {
+      query = query.eq('driver_name', driverName);
     }
 
     const { data, error } = await query.range(from, from + BATCH_SIZE - 1);
