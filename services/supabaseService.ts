@@ -1,5 +1,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { SupabaseConfig, Ticket, KpiStats, ImportPreviewItem, ImportAnalysis, FieldChange, ImportResult, ImportLog, BatchProgress } from '../types';
+import { SupabaseConfig, Ticket, KpiStats, ImportPreviewItem, ImportAnalysis, FieldChange, ImportResult, ImportLog, BatchProgress, ReportParams, ReportData, ReportMetadata, ReportStatistics, StatusDistribution, DriverDistribution } from '../types';
+import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
 
 let supabase: SupabaseClient | null = null;
 
@@ -1093,4 +1095,299 @@ export const clearAllData = async (
       error: error.message || 'Erro desconhecido ao limpar banco de dados'
     };
   }
+};
+
+const translateStatus = (status: string) => {
+  if (!status) return 'Desconhecido';
+  const s = status.toLowerCase();
+
+  if (s.includes('reversed')) return 'Devolvido';
+  if (s.includes('returned')) return 'Devolvido';
+  if (s.includes('forbilling')) return 'Faturamento';
+  if (s.includes('delivered')) return 'Entregue';
+  if (s.includes('created')) return 'Criado';
+  if (s.includes('pending driver reply')) return 'Aguardando Resposta';
+  if (s.includes('review driver reply')) return 'Análise Resposta';
+  if (s.includes('cancelled')) return 'Cancelado';
+
+  return status;
+};
+
+const formatDriverName = (name: string) => {
+  if (!name) return 'N/A';
+  return name.replace(/^\[.*?\]\s*/, '');
+};
+
+const calculateDateRange = (periodType: string, startDate?: string, endDate?: string): { start: string; end: string } => {
+  if (periodType === 'custom') {
+    return { start: startDate || '', end: endDate || '' };
+  }
+
+  if (periodType === 'all') {
+    return { start: '', end: '' };
+  }
+
+  const today = new Date();
+  const end = today.toISOString().split('T')[0];
+
+  const daysMap: Record<string, number> = {
+    last7: 7,
+    last30: 30,
+    last90: 90,
+    last365: 365
+  };
+
+  const days = daysMap[periodType] || 0;
+  const startDateObj = new Date(today);
+  startDateObj.setDate(today.getDate() - days);
+  const start = startDateObj.toISOString().split('T')[0];
+
+  return { start, end };
+};
+
+export const generateReportData = async (params: ReportParams): Promise<ReportData> => {
+  if (!supabase) throw new Error("Supabase client not initialized");
+
+  const { start, end } = calculateDateRange(params.periodType, params.startDate, params.endDate);
+
+  let allTickets: Ticket[] = [];
+  let from = 0;
+  const BATCH_SIZE = 1000;
+  let hasMore = true;
+
+  while (hasMore) {
+    let query = supabase
+      .from('tickets')
+      .select('*');
+
+    if (start) {
+      query = query.gte('created_time', start);
+    }
+    if (end) {
+      query = query.lte('created_time', end);
+    }
+
+    if (params.driverFilter) {
+      query = query.eq('driver_name', params.driverFilter);
+    }
+
+    if (params.statusFilter) {
+      query = query.ilike('original_status', `%${params.statusFilter}%`);
+    }
+
+    const { data, error } = await query.range(from, from + BATCH_SIZE - 1);
+
+    if (error) throw error;
+
+    if (!data || data.length === 0) {
+      hasMore = false;
+    } else {
+      allTickets = [...allTickets, ...(data as Ticket[])];
+
+      if (data.length < BATCH_SIZE) {
+        hasMore = false;
+      } else {
+        from += BATCH_SIZE;
+      }
+    }
+  }
+
+  let importLogs: ImportLog[] = [];
+  if (start || end) {
+    let logsQuery = supabase
+      .from('import_logs')
+      .select('*')
+      .order('import_date', { ascending: false });
+
+    if (start) {
+      logsQuery = logsQuery.gte('import_date', start);
+    }
+    if (end) {
+      logsQuery = logsQuery.lte('import_date', end);
+    }
+
+    const { data: logsData } = await logsQuery;
+    importLogs = (logsData as ImportLog[]) || [];
+  } else {
+    const { data: logsData } = await supabase
+      .from('import_logs')
+      .select('*')
+      .order('import_date', { ascending: false });
+    importLogs = (logsData as ImportLog[]) || [];
+  }
+
+  const totalTickets = allTickets.length;
+  const totalValue = allTickets.reduce((acc, t) => acc + (Number(t.pnr_value) || 0), 0);
+  const pendingCount = allTickets.filter(t => t.internal_status === 'Pendente').length;
+  const inAnalysisCount = allTickets.filter(t => t.internal_status === 'Em Análise').length;
+  const completedCount = allTickets.filter(t => t.internal_status === 'Concluído').length;
+  const averageValue = totalTickets > 0 ? totalValue / totalTickets : 0;
+
+  const statistics: ReportStatistics = {
+    totalTickets,
+    totalValue,
+    pendingCount,
+    inAnalysisCount,
+    completedCount,
+    averageValue
+  };
+
+  const statusCounts: Record<string, number> = {};
+  allTickets.forEach(t => {
+    const s = translateStatus(t.original_status || 'Unknown');
+    statusCounts[s] = (statusCounts[s] || 0) + 1;
+  });
+  const statusDistribution: StatusDistribution[] = Object.entries(statusCounts).map(([status, count]) => ({
+    status,
+    count,
+    percentage: totalTickets > 0 ? (count / totalTickets) * 100 : 0
+  }));
+
+  const driverCounts: Record<string, { count: number; totalValue: number }> = {};
+  allTickets.forEach(t => {
+    const d = formatDriverName(t.driver_name || 'Unknown');
+    if (!driverCounts[d]) {
+      driverCounts[d] = { count: 0, totalValue: 0 };
+    }
+    driverCounts[d].count++;
+    driverCounts[d].totalValue += Number(t.pnr_value) || 0;
+  });
+  const driverDistribution: DriverDistribution[] = Object.entries(driverCounts)
+    .map(([driver, data]) => ({
+      driver,
+      count: data.count,
+      totalValue: data.totalValue,
+      averageValue: data.count > 0 ? data.totalValue / data.count : 0
+    }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 20);
+
+  let periodLabel = 'Todos os dados';
+  if (params.periodType === 'last7') periodLabel = 'Últimos 7 dias';
+  else if (params.periodType === 'last30') periodLabel = 'Últimos 30 dias';
+  else if (params.periodType === 'last90') periodLabel = 'Últimos 90 dias';
+  else if (params.periodType === 'last365') periodLabel = 'Último ano';
+  else if (params.periodType === 'custom' && start && end) {
+    periodLabel = `${start} até ${end}`;
+  }
+
+  const metadata: ReportMetadata = {
+    generatedAt: new Date().toISOString(),
+    period: periodLabel,
+    filters: {
+      driver: params.driverFilter,
+      status: params.statusFilter,
+      dateRange: start && end ? `${start} até ${end}` : undefined
+    },
+    totalRecords: totalTickets
+  };
+
+  return {
+    tickets: allTickets,
+    metadata,
+    statistics,
+    statusDistribution,
+    driverDistribution,
+    importLogs
+  };
+};
+
+export const exportToCSV = (reportData: ReportData): void => {
+  const formattedTickets = reportData.tickets.map(ticket => ({
+    'ID do Ticket': ticket.ticket_id,
+    'Código de Rastreio': ticket.spxtn || '',
+    'Motorista': formatDriverName(ticket.driver_name),
+    'Estação': ticket.station,
+    'Valor (R$)': Number(ticket.pnr_value).toFixed(2),
+    'Status Original': translateStatus(ticket.original_status),
+    'Status Interno': ticket.internal_status,
+    'Prazo SLA': ticket.sla_deadline,
+    'Notas': ticket.internal_notes || '',
+    'Data de Criação': ticket.created_time || '',
+    'Última Atualização': ticket.updated_at || ''
+  }));
+
+  const csv = Papa.unparse(formattedTickets, {
+    delimiter: ',',
+    header: true
+  });
+
+  const BOM = '\uFEFF';
+  const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+
+  const periodName = reportData.metadata.period.replace(/[^a-zA-Z0-9]/g, '_');
+  const fileName = `Relatorio_${periodName}_${new Date().toISOString().split('T')[0]}.csv`;
+
+  link.setAttribute('href', url);
+  link.setAttribute('download', fileName);
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
+export const exportToExcel = (reportData: ReportData): void => {
+  const workbook = XLSX.utils.book_new();
+
+  const ticketsData = reportData.tickets.map(ticket => ({
+    'ID do Ticket': ticket.ticket_id,
+    'Código de Rastreio': ticket.spxtn || '',
+    'Motorista': formatDriverName(ticket.driver_name),
+    'Estação': ticket.station,
+    'Valor': Number(ticket.pnr_value),
+    'Status Original': translateStatus(ticket.original_status),
+    'Status Interno': ticket.internal_status,
+    'Prazo SLA': ticket.sla_deadline,
+    'Notas': ticket.internal_notes || '',
+    'Data de Criação': ticket.created_time || '',
+    'Última Atualização': ticket.updated_at || ''
+  }));
+  const ticketsSheet = XLSX.utils.json_to_sheet(ticketsData);
+  XLSX.utils.book_append_sheet(workbook, ticketsSheet, 'Tickets');
+
+  const statisticsData = [
+    { 'Métrica': 'Total de Tickets', 'Valor': reportData.statistics.totalTickets },
+    { 'Métrica': 'Valor Total', 'Valor': `R$ ${reportData.statistics.totalValue.toFixed(2)}` },
+    { 'Métrica': 'Tickets Pendentes', 'Valor': reportData.statistics.pendingCount },
+    { 'Métrica': 'Tickets em Análise', 'Valor': reportData.statistics.inAnalysisCount },
+    { 'Métrica': 'Tickets Concluídos', 'Valor': reportData.statistics.completedCount },
+    { 'Métrica': 'Valor Médio por Ticket', 'Valor': `R$ ${reportData.statistics.averageValue.toFixed(2)}` }
+  ];
+  const statisticsSheet = XLSX.utils.json_to_sheet(statisticsData);
+  XLSX.utils.book_append_sheet(workbook, statisticsSheet, 'Estatísticas');
+
+  const statusData = reportData.statusDistribution.map(item => ({
+    'Status': item.status,
+    'Quantidade': item.count,
+    'Percentual': `${item.percentage.toFixed(2)}%`
+  }));
+  const statusSheet = XLSX.utils.json_to_sheet(statusData);
+  XLSX.utils.book_append_sheet(workbook, statusSheet, 'Distribuição por Status');
+
+  const driverData = reportData.driverDistribution.map(item => ({
+    'Motorista': item.driver,
+    'Quantidade': item.count,
+    'Valor Total': Number(item.totalValue.toFixed(2)),
+    'Valor Médio': Number(item.averageValue.toFixed(2))
+  }));
+  const driverSheet = XLSX.utils.json_to_sheet(driverData);
+  XLSX.utils.book_append_sheet(workbook, driverSheet, 'Distribuição por Motorista');
+
+  const importLogsData = reportData.importLogs.map(log => ({
+    'Data': new Date(log.import_date).toLocaleString('pt-BR'),
+    'Arquivo': log.file_name,
+    'Novos': log.new_records,
+    'Atualizados': log.updated_records,
+    'Ignorados': log.skipped_records,
+    'Total': log.total_rows
+  }));
+  const importLogsSheet = XLSX.utils.json_to_sheet(importLogsData);
+  XLSX.utils.book_append_sheet(workbook, importLogsSheet, 'Histórico de Importações');
+
+  const periodName = reportData.metadata.period.replace(/[^a-zA-Z0-9]/g, '_');
+  const fileName = `Relatorio_${periodName}_${new Date().toISOString().split('T')[0]}.xlsx`;
+
+  XLSX.writeFile(workbook, fileName);
 };

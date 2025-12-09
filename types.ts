@@ -106,3 +106,57 @@ export interface BatchProgress {
   stage: 'analyzing' | 'importing';
   message: string;
 }
+
+export type ReportPeriodType = 'all' | 'last7' | 'last30' | 'last90' | 'last365' | 'custom';
+export type ReportFormat = 'csv' | 'excel';
+
+export interface ReportParams {
+  periodType: ReportPeriodType;
+  startDate?: string;
+  endDate?: string;
+  format: ReportFormat;
+  driverFilter?: string;
+  statusFilter?: string;
+}
+
+export interface ReportMetadata {
+  generatedAt: string;
+  period: string;
+  filters: {
+    driver?: string;
+    status?: string;
+    dateRange?: string;
+  };
+  totalRecords: number;
+}
+
+export interface ReportStatistics {
+  totalTickets: number;
+  totalValue: number;
+  pendingCount: number;
+  inAnalysisCount: number;
+  completedCount: number;
+  averageValue: number;
+}
+
+export interface StatusDistribution {
+  status: string;
+  count: number;
+  percentage: number;
+}
+
+export interface DriverDistribution {
+  driver: string;
+  count: number;
+  totalValue: number;
+  averageValue: number;
+}
+
+export interface ReportData {
+  tickets: Ticket[];
+  metadata: ReportMetadata;
+  statistics: ReportStatistics;
+  statusDistribution: StatusDistribution[];
+  driverDistribution: DriverDistribution[];
+  importLogs: ImportLog[];
+}
