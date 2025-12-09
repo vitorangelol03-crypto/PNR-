@@ -52,12 +52,23 @@ Sistema de gerenciamento logístico que permite visualizar dados através de um 
 - [x] Pesquisa em massa por múltiplos códigos de rastreio
 - [x] Feedback visual de códigos encontrados e não encontrados
 - [x] Atualização em massa de status interno com modal dedicado
+- [x] **Sistema de segurança logística para atualização em massa**:
+  - [x] Categorização automática (tickets novos vs já alterados)
+  - [x] Cards informativos com 3 categorias
+  - [x] Card de alerta destacado para tickets com histórico
+  - [x] Seção expandível com detalhes de tickets alterados
+  - [x] Badges visuais na tabela (verde/amarelo)
+  - [x] Checkbox de confirmação obrigatório para tickets com histórico
+  - [x] Resumo claro antes da execução
+  - [x] Validação robusta impedindo ações acidentais
 - [x] Rastreamento de data/hora de atualização do status interno
 - [x] Exibição formatada de data/hora de última atualização (DD/MM HH:mm)
+- [x] Tempo relativo desde última alteração ("há X dias/horas/minutos")
 - [x] Sistema de ordenação por prazo SLA ou por data de atualização
 - [x] Indicação visual de tickets "Não movimentados"
 - [x] Tabelas do banco de dados criadas e configuradas
 - [x] Botão de zerar banco de dados com confirmação de segurança
+- [x] Filtro de motorista integrado (gráficos + tabela)
 
 ### Configuração Atual
 - **Supabase URL**: https://vjkjusmzvxdzdeogmqdx.supabase.co
@@ -1528,6 +1539,205 @@ Sistema de gerenciamento logístico que permite visualizar dados através de um 
   - Sistema totalmente integrado e funcional
   - Experiência de usuário premium implementada
 
+### 2025-12-09 - Sistema de Segurança Logística para Atualização em Massa de Status
+- **Modificações**:
+  1. **Categorização Automática de Tickets**:
+     - Implementado sistema usando `useMemo` para categorizar tickets em tempo real
+     - Separação em duas categorias principais:
+       - **Tickets Novos**: Nunca tiveram status interno alterado (`internal_status_updated_at` é null)
+       - **Tickets Já Alterados**: Possuem histórico de alteração com data/hora registrada
+     - Cálculo automático de:
+       - Total de tickets em cada categoria
+       - Quantos de cada tipo estão selecionados para atualização
+       - Arrays separados para fácil manipulação
+
+  2. **Funções Utilitárias de Data/Hora**:
+     - Criada função `getTimeAgo(dateString)` para exibir tempo relativo:
+       - "há X minutos" (< 60 minutos)
+       - "há X horas" (< 24 horas)
+       - "há X dias" (>= 24 horas)
+     - Reutiliza função existente `formatStatusUpdateDate()` para formato DD/MM HH:mm
+     - Tratamento robusto de erros e valores nulos
+
+  3. **Estatísticas Melhoradas com 3 Categorias**:
+     - Substituído layout de 2 cards por 3 cards informativos:
+       - **Card Verde** - Tickets Novos: nunca alterados, prontos para primeira movimentação
+       - **Card Amarelo/Âmbar** - Já Alterados: possuem histórico, requerem atenção especial
+       - **Card Vermelho** - Não Encontrados: códigos inválidos do CSV
+     - Cada card mostra:
+       - Ícone contextual
+       - Quantidade em fonte grande e destacada
+       - Descrição curta do significado
+     - Layout grid responsivo (3 colunas)
+
+  4. **Card de Alerta para Tickets com Histórico**:
+     - Componente destacado com borda amarela dupla quando há tickets já alterados
+     - Exibe mensagens claras:
+       - "Atenção: Tickets com Histórico Detectados"
+       - Quantidade exata de tickets afetados
+       - Aviso sobre sobrescrita de histórico
+     - Botão expansível "Ver detalhes dos tickets alterados":
+       - Mostra/oculta seção de detalhes
+       - Ícone Info indicando mais informações disponíveis
+     - **Seção de Detalhes Expandível**:
+       - Lista scrollável (max-height 192px) com todos os tickets alterados
+       - Para cada ticket mostra:
+         - Código de rastreio em fonte mono destacada
+         - Status atual do ticket
+         - Tempo relativo ("há X dias") + data/hora formatada
+       - Fundo branco com borda âmbar
+       - Separadores entre itens
+
+  5. **Badges Visuais na Tabela de Confirmação**:
+     - Adicionada nova coluna "Histórico" na tabela de preview
+     - Badges coloridos por categoria:
+       - **Badge Verde "Novo"**: para tickets sem histórico
+       - **Badge Amarelo "Alterado"**: para tickets com histórico
+         - Inclui ícone AlertTriangle
+         - Tooltip mostra tempo desde última alteração
+     - Linhas com fundo diferenciado:
+       - Tickets alterados têm fundo âmbar claro (bg-amber-50/30)
+       - Destaque visual sutil mas perceptível
+     - Layout da tabela reorganizado:
+       - 6 colunas: Seleção | Histórico | Código | Status Atual | Última Atualização | Novo Status
+
+  6. **Checkbox de Confirmação Adicional**:
+     - Aparece SOMENTE quando há tickets já alterados selecionados
+     - Card destacado com fundo âmbar e borda
+     - Checkbox grande (w-5 h-5) para fácil visualização
+     - Mensagem clara e específica:
+       - "Confirmo que desejo alterar X tickets que já foram movimentados"
+       - Aviso secundário: "Esta ação irá sobrescrever o histórico existente"
+     - Validação:
+       - Botão de atualização desabilitado até marcar checkbox
+       - Alert se tentar prosseguir sem confirmar
+       - Condição adicionada na função handleUpdateStatus
+
+  7. **Resumo da Atualização**:
+     - Card azul informativo antes dos botões de ação
+     - Exibe exatamente o que será feito:
+       - Quantidade de tickets novos (verde)
+       - Quantidade de tickets já alterados (amarelo)
+       - Status de destino
+     - Formatação semântica com cores e negrito
+     - Mensagem dinâmica adaptada à seleção
+
+  8. **Validação de Segurança na Execução**:
+     - Verificação antes de executar atualização:
+       ```typescript
+       if (ticketCategories.selectedAlteredCount > 0 && !confirmAlteredTickets) {
+         alert('Por favor, confirme que deseja alterar tickets...');
+         return;
+       }
+       ```
+     - Previne execução acidental de sobrescritas
+     - Força decisão consciente do usuário
+
+  9. **Estados e Reset Completo**:
+     - Adicionados 2 novos estados:
+       - `confirmAlteredTickets: boolean` - controla checkbox de confirmação
+       - `showAlteredDetails: boolean` - controla expansão de detalhes
+     - Reset completo ao fechar modal:
+       - Ambos os estados zerados
+       - Previne comportamento inconsistente entre aberturas
+
+  10. **Importações e Ícones Novos**:
+      - `AlertTriangle` - alerta para tickets já alterados
+      - `Info` - botão de informações adicionais
+      - `useMemo` - otimização de categorização
+      - Todos do lucide-react
+
+- **Arquivos Modificados**:
+  - `components/BulkStatusModal.tsx`:
+    - Linha 1: Adicionado `useMemo` no import do React
+    - Linha 2: Adicionados ícones `AlertTriangle` e `Info`
+    - Linhas 22-43: Criada função `getTimeAgo()` para tempo relativo
+    - Linhas 61-62: Adicionados estados `confirmAlteredTickets` e `showAlteredDetails`
+    - Linhas 64-81: Implementado `useMemo` para categorização de tickets
+    - Linhas 114-117: Adicionada validação de confirmação em `handleUpdateStatus`
+    - Linhas 154-155: Reset dos novos estados em `handleClose`
+    - Linhas 242-269: Refatorados cards de estatísticas (3 categorias)
+    - Linhas 284-332: Implementado card de alerta com seção expandível
+    - Linhas 366-438: Refatorada tabela com nova coluna e badges visuais
+    - Linhas 442-461: Implementado checkbox de confirmação adicional
+    - Linhas 463-479: Adicionado resumo da atualização
+    - Linha 490: Atualizada condição de desabilitação do botão
+
+- **Fluxo de Segurança Implementado**:
+  ```
+  1. Usuário cola códigos de rastreio
+  ↓
+  2. Sistema busca tickets e categoriza automaticamente
+     - Novos (sem internal_status_updated_at)
+     - Já Alterados (com internal_status_updated_at)
+  ↓
+  3. Exibe estatísticas em 3 cards coloridos
+  ↓
+  4. SE houver tickets já alterados:
+     - Mostra card de alerta amarelo destacado
+     - Botão "Ver detalhes" permite expandir lista completa
+     - Detalhes mostram: código, status atual, quando foi alterado
+  ↓
+  5. Tabela de confirmação com badges visuais:
+     - Verde "Novo" para tickets sem histórico
+     - Amarelo "Alterado" para tickets com histórico
+     - Linhas diferenciadas por cor de fundo
+  ↓
+  6. SE tickets alterados estiverem selecionados:
+     - Checkbox obrigatório aparece
+     - "Confirmo que desejo alterar X tickets..."
+     - Botão desabilitado até marcar
+  ↓
+  7. Resumo final mostra exatamente o que será feito
+  ↓
+  8. Validação final antes de executar:
+     - Verifica se checkbox foi marcado (se necessário)
+     - Alert se tentar sem confirmar
+  ↓
+  9. Execução da atualização com segurança garantida
+  ```
+
+- **Benefícios do Sistema de Segurança**:
+  - **Prevenção de Erros**: Impossível sobrescrever histórico acidentalmente
+  - **Transparência Total**: Usuário vê exatamente o que será alterado
+  - **Rastreabilidade**: Histórico de quando tickets foram mexidos é preservado visualmente
+  - **Decisão Informada**: Múltiplas camadas de informação antes da confirmação
+  - **Experiência Profissional**: Interface clara e intuitiva
+  - **Auditoria**: Fácil identificar quais tickets têm histórico
+  - **Confiabilidade**: Sistema robusto que previne ações destrutivas
+
+- **Especificações Técnicas**:
+  - Categorização: O(n) usando filter em useMemo (reativa)
+  - Tempo relativo: Cálculo em milissegundos com formatação pt-BR
+  - Validação: Lógica booleana com short-circuit
+  - Performance: useMemo evita recálculos desnecessários
+  - Acessibilidade: Labels claros, cores semânticas, tooltips
+
+- **Experiência do Usuário**:
+  - **Visual**: Cores semânticas (verde=seguro, amarelo=atenção, vermelho=perigo)
+  - **Informativo**: Múltiplos níveis de informação (resumo → detalhes)
+  - **Progressivo**: Informações reveladas conforme necessidade
+  - **Seguro**: Múltiplas confirmações evitam erros
+  - **Intuitivo**: Fluxo natural e previsível
+
+- **Motivo**: Adicionar camada de segurança logística para prevenir sobrescritas acidentais de histórico em tickets já movimentados, fornecendo transparência total sobre o que será alterado e exigindo confirmação consciente do usuário
+
+- **Status**: Concluído ✅
+
+- **Resultado**:
+  - Sistema de segurança multinível implementado
+  - Categorização automática funcionando perfeitamente
+  - Cards de estatísticas com 3 categorias (novos/alterados/não encontrados)
+  - Card de alerta destacado para tickets com histórico
+  - Seção expandível mostrando detalhes completos
+  - Badges visuais na tabela (verde/amarelo)
+  - Linhas diferenciadas por cor de fundo
+  - Checkbox de confirmação obrigatório quando necessário
+  - Resumo claro antes da execução
+  - Validação robusta impedindo ações acidentais
+  - Build executado com sucesso (830.53 KB)
+  - Sistema profissional e seguro pronto para produção
+
 ### Solicitação do Usuário
 1. Responder sempre em português
 2. Criar arquivo de contexto (MD) para registrar tudo do chat e atualizações do projeto
@@ -1542,6 +1752,7 @@ Sistema de gerenciamento logístico que permite visualizar dados através de um 
    - Feedback visual mostrando o que está sendo criado/atualizado
    - Sistema de LOG para rastrear histórico de importações
 8. Integrar filtro de motorista dos gráficos com tabela de tickets
+9. Adicionar sistema de segurança logística na atualização em massa
 
 ### Status
 - ✅ Arquivo PROJECT_CONTEXT.md criado
@@ -1564,4 +1775,6 @@ Sistema de gerenciamento logístico que permite visualizar dados através de um 
 - ✅ Modal de histórico de importações criado
 - ✅ Detecção de duplicatas internas no CSV implementada
 - ✅ Erros 409 (Conflict) completamente eliminados
+- ✅ **Sistema de segurança logística implementado**
+- ✅ Filtro de motorista integrado aos gráficos e tabela
 - ✅ Projeto 100% funcional e robusto

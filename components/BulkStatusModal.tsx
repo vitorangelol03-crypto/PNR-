@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, Check, AlertCircle, Loader2, Clock } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { X, Check, AlertCircle, Loader2, Clock, AlertTriangle, Info } from 'lucide-react';
 import { Ticket } from '../types';
 import { parseTrackingCodes, fetchTicketsByTrackingCodes, updateMultipleTicketsStatus } from '../services/supabaseService';
 
@@ -14,6 +14,29 @@ const formatStatusUpdateDate = (dateString?: string) => {
     const minutes = date.getMinutes().toString().padStart(2, '0');
 
     return `${day}/${month} ${hours}:${minutes}`;
+  } catch {
+    return null;
+  }
+};
+
+const getTimeAgo = (dateString?: string) => {
+  if (!dateString) return null;
+
+  try {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 60) {
+      return `há ${diffMins} minuto${diffMins !== 1 ? 's' : ''}`;
+    } else if (diffHours < 24) {
+      return `há ${diffHours} hora${diffHours !== 1 ? 's' : ''}`;
+    } else {
+      return `há ${diffDays} dia${diffDays !== 1 ? 's' : ''}`;
+    }
   } catch {
     return null;
   }
@@ -35,6 +58,27 @@ export const BulkStatusModal: React.FC<BulkStatusModalProps> = ({ isOpen, onClos
   const [processing, setProcessing] = useState(false);
   const [successCount, setSuccessCount] = useState(0);
   const [errorCount, setErrorCount] = useState(0);
+  const [confirmAlteredTickets, setConfirmAlteredTickets] = useState(false);
+  const [showAlteredDetails, setShowAlteredDetails] = useState(false);
+
+  const ticketCategories = useMemo(() => {
+    const newTickets = foundTickets.filter(t => !t.internal_status_updated_at);
+    const alteredTickets = foundTickets.filter(t => t.internal_status_updated_at);
+
+    const selectedNew = newTickets.filter(t => selectedTicketIds.has(t.ticket_id));
+    const selectedAltered = alteredTickets.filter(t => selectedTicketIds.has(t.ticket_id));
+
+    return {
+      newTickets,
+      alteredTickets,
+      selectedNew,
+      selectedAltered,
+      totalNew: newTickets.length,
+      totalAltered: alteredTickets.length,
+      selectedNewCount: selectedNew.length,
+      selectedAlteredCount: selectedAltered.length
+    };
+  }, [foundTickets, selectedTicketIds]);
 
   const handleSearch = async () => {
     const codes = parseTrackingCodes(inputCodes);
@@ -64,6 +108,11 @@ export const BulkStatusModal: React.FC<BulkStatusModalProps> = ({ isOpen, onClos
 
   const handleUpdateStatus = async () => {
     if (!selectedStatus || selectedTicketIds.size === 0) {
+      return;
+    }
+
+    if (ticketCategories.selectedAlteredCount > 0 && !confirmAlteredTickets) {
+      alert('Por favor, confirme que deseja alterar tickets que já foram movimentados anteriormente.');
       return;
     }
 
@@ -102,6 +151,8 @@ export const BulkStatusModal: React.FC<BulkStatusModalProps> = ({ isOpen, onClos
     setProcessing(false);
     setSuccessCount(0);
     setErrorCount(0);
+    setConfirmAlteredTickets(false);
+    setShowAlteredDetails(false);
     onClose();
   };
 
@@ -188,13 +239,23 @@ export const BulkStatusModal: React.FC<BulkStatusModalProps> = ({ isOpen, onClos
 
           {step === 'confirm' && (
             <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <Check className="w-5 h-5 text-green-600" />
-                    <span className="font-semibold text-green-700">Encontrados</span>
+                    <span className="font-semibold text-green-700">Tickets Novos</span>
                   </div>
-                  <p className="text-3xl font-bold text-green-700">{foundTickets.length}</p>
+                  <p className="text-3xl font-bold text-green-700">{ticketCategories.totalNew}</p>
+                  <p className="text-xs text-green-600 mt-1">Nunca alterados</p>
+                </div>
+
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertTriangle className="w-5 h-5 text-amber-600" />
+                    <span className="font-semibold text-amber-700">Já Alterados</span>
+                  </div>
+                  <p className="text-3xl font-bold text-amber-700">{ticketCategories.totalAltered}</p>
+                  <p className="text-xs text-amber-600 mt-1">Com histórico</p>
                 </div>
 
                 <div className="bg-red-50 border border-red-200 rounded-lg p-4">
@@ -203,6 +264,7 @@ export const BulkStatusModal: React.FC<BulkStatusModalProps> = ({ isOpen, onClos
                     <span className="font-semibold text-red-700">Não Encontrados</span>
                   </div>
                   <p className="text-3xl font-bold text-red-700">{notFoundCodes.length}</p>
+                  <p className="text-xs text-red-600 mt-1">Códigos inválidos</p>
                 </div>
               </div>
 
@@ -215,6 +277,56 @@ export const BulkStatusModal: React.FC<BulkStatusModalProps> = ({ isOpen, onClos
                         {code}
                       </span>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {ticketCategories.totalAltered > 0 && (
+                <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5">
+                      <AlertTriangle className="w-6 h-6 text-amber-600" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-bold text-amber-900 mb-2 flex items-center gap-2">
+                        Atenção: Tickets com Histórico Detectados
+                      </h3>
+                      <p className="text-sm text-amber-800 mb-3">
+                        <strong>{ticketCategories.totalAltered}</strong> ticket{ticketCategories.totalAltered !== 1 ? 's' : ''} já
+                        {ticketCategories.totalAltered !== 1 ? ' foram alterados' : ' foi alterado'} anteriormente.
+                        Ao prosseguir, você estará sobrescrevendo o histórico existente.
+                      </p>
+
+                      <button
+                        onClick={() => setShowAlteredDetails(!showAlteredDetails)}
+                        className="text-sm text-amber-700 hover:text-amber-900 font-medium flex items-center gap-1 hover:underline"
+                      >
+                        <Info className="w-4 h-4" />
+                        {showAlteredDetails ? 'Ocultar' : 'Ver'} detalhes dos tickets alterados
+                      </button>
+
+                      {showAlteredDetails && (
+                        <div className="mt-4 bg-white border border-amber-200 rounded-lg p-4 max-h-48 overflow-y-auto">
+                          <div className="space-y-3">
+                            {ticketCategories.alteredTickets.map(ticket => (
+                              <div key={ticket.ticket_id} className="text-sm border-b border-amber-100 pb-2 last:border-0">
+                                <div className="font-mono text-amber-900 font-semibold">
+                                  {ticket.spxtn || ticket.ticket_id}
+                                </div>
+                                <div className="text-amber-700 mt-1">
+                                  Status atual: <span className="font-medium">{ticket.internal_status}</span>
+                                </div>
+                                <div className="text-amber-600 text-xs mt-1 flex items-center gap-1">
+                                  <Clock className="w-3 h-3" />
+                                  Alterado {getTimeAgo(ticket.internal_status_updated_at)}
+                                  ({formatStatusUpdateDate(ticket.internal_status_updated_at)})
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
@@ -256,6 +368,7 @@ export const BulkStatusModal: React.FC<BulkStatusModalProps> = ({ isOpen, onClos
                       <thead className="bg-gray-50 sticky top-0">
                         <tr>
                           <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Sel.</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Histórico</th>
                           <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Código</th>
                           <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status Atual</th>
                           <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Última Atualização</th>
@@ -263,48 +376,107 @@ export const BulkStatusModal: React.FC<BulkStatusModalProps> = ({ isOpen, onClos
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
-                        {foundTickets.map(ticket => (
-                          <tr key={ticket.ticket_id} className="hover:bg-gray-50">
-                            <td className="px-4 py-3">
-                              <input
-                                type="checkbox"
-                                checked={selectedTicketIds.has(ticket.ticket_id)}
-                                onChange={() => toggleTicket(ticket.ticket_id)}
-                                className="w-4 h-4 text-blue-600 rounded"
-                              />
-                            </td>
-                            <td className="px-4 py-3 text-sm font-mono text-gray-700">
-                              {ticket.spxtn || ticket.ticket_id}
-                            </td>
-                            <td className="px-4 py-3">
-                              <span className={`text-xs font-medium px-2 py-1 rounded-full ${getStatusColor(ticket.internal_status || 'Pendente')}`}>
-                                {ticket.internal_status || 'Pendente'}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-1 text-xs text-gray-600">
-                                <Clock className="w-3 h-3" />
-                                <span>
-                                  {formatStatusUpdateDate(ticket.internal_status_updated_at) || 'Não movimentado'}
+                        {foundTickets.map(ticket => {
+                          const isAltered = !!ticket.internal_status_updated_at;
+                          return (
+                            <tr
+                              key={ticket.ticket_id}
+                              className={`hover:bg-gray-50 ${isAltered ? 'bg-amber-50/30' : ''}`}
+                            >
+                              <td className="px-4 py-3">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedTicketIds.has(ticket.ticket_id)}
+                                  onChange={() => toggleTicket(ticket.ticket_id)}
+                                  className="w-4 h-4 text-blue-600 rounded"
+                                />
+                              </td>
+                              <td className="px-4 py-3">
+                                {isAltered ? (
+                                  <div className="flex items-center gap-1" title={`Alterado ${getTimeAgo(ticket.internal_status_updated_at)}`}>
+                                    <span className="text-xs font-medium px-2 py-1 rounded-full bg-amber-100 text-amber-700 flex items-center gap-1">
+                                      <AlertTriangle className="w-3 h-3" />
+                                      Alterado
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-xs font-medium px-2 py-1 rounded-full bg-green-100 text-green-700">
+                                    Novo
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 text-sm font-mono text-gray-700">
+                                {ticket.spxtn || ticket.ticket_id}
+                              </td>
+                              <td className="px-4 py-3">
+                                <span className={`text-xs font-medium px-2 py-1 rounded-full ${getStatusColor(ticket.internal_status || 'Pendente')}`}>
+                                  {ticket.internal_status || 'Pendente'}
                                 </span>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3">
-                              {selectedStatus && selectedTicketIds.has(ticket.ticket_id) ? (
-                                <span className={`text-xs font-medium px-2 py-1 rounded-full ${getStatusColor(selectedStatus)}`}>
-                                  {selectedStatus}
-                                </span>
-                              ) : (
-                                <span className="text-xs text-gray-400">-</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-1 text-xs text-gray-600">
+                                  <Clock className="w-3 h-3" />
+                                  <span>
+                                    {formatStatusUpdateDate(ticket.internal_status_updated_at) || 'Não movimentado'}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3">
+                                {selectedStatus && selectedTicketIds.has(ticket.ticket_id) ? (
+                                  <span className={`text-xs font-medium px-2 py-1 rounded-full ${getStatusColor(selectedStatus)}`}>
+                                    {selectedStatus}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-gray-400">-</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
                 </div>
               )}
+
+              {ticketCategories.selectedAlteredCount > 0 && (
+                <div className="bg-amber-50 border border-amber-300 rounded-lg p-4">
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={confirmAlteredTickets}
+                      onChange={(e) => setConfirmAlteredTickets(e.target.checked)}
+                      className="w-5 h-5 text-amber-600 rounded mt-0.5 flex-shrink-0"
+                    />
+                    <div>
+                      <span className="text-sm font-medium text-amber-900">
+                        Confirmo que desejo alterar {ticketCategories.selectedAlteredCount} ticket{ticketCategories.selectedAlteredCount !== 1 ? 's' : ''} que já {ticketCategories.selectedAlteredCount !== 1 ? 'foram movimentados' : 'foi movimentado'} anteriormente
+                      </span>
+                      <p className="text-xs text-amber-700 mt-1">
+                        Esta ação irá sobrescrever o histórico existente desses tickets.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              )}
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p className="text-sm text-blue-800">
+                  <strong>Resumo da atualização:</strong> Você está prestes a alterar{' '}
+                  {ticketCategories.selectedNewCount > 0 && (
+                    <span className="font-semibold text-green-700">
+                      {ticketCategories.selectedNewCount} ticket{ticketCategories.selectedNewCount !== 1 ? 's novos' : ' novo'}
+                    </span>
+                  )}
+                  {ticketCategories.selectedNewCount > 0 && ticketCategories.selectedAlteredCount > 0 && ' e '}
+                  {ticketCategories.selectedAlteredCount > 0 && (
+                    <span className="font-semibold text-amber-700">
+                      {ticketCategories.selectedAlteredCount} ticket{ticketCategories.selectedAlteredCount !== 1 ? 's já alterados' : ' já alterado'}
+                    </span>
+                  )}
+                  {' '}para o status <strong>{selectedStatus}</strong>.
+                </p>
+              </div>
 
               <div className="flex gap-3">
                 <button
@@ -315,7 +487,7 @@ export const BulkStatusModal: React.FC<BulkStatusModalProps> = ({ isOpen, onClos
                 </button>
                 <button
                   onClick={handleUpdateStatus}
-                  disabled={!selectedStatus || selectedTicketIds.size === 0}
+                  disabled={!selectedStatus || selectedTicketIds.size === 0 || (ticketCategories.selectedAlteredCount > 0 && !confirmAlteredTickets)}
                   className="flex-1 bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition font-medium"
                 >
                   Atualizar {selectedTicketIds.size} Ticket{selectedTicketIds.size !== 1 ? 's' : ''}
