@@ -920,7 +920,54 @@ export interface ClearDatabaseResult {
   error?: string;
 }
 
+export interface ClearDatabaseParams {
+  startDate?: string;
+  endDate?: string;
+  deleteAll: boolean;
+}
+
+export interface PreviewCounts {
+  tickets: number;
+  logs: number;
+}
+
+export const getDeletePreviewCounts = async (
+  startDate?: string,
+  endDate?: string
+): Promise<PreviewCounts> => {
+  if (!supabase) throw new Error("Supabase client not initialized");
+
+  let ticketsQuery = supabase
+    .from('tickets')
+    .select('*', { count: 'exact', head: true });
+
+  let logsQuery = supabase
+    .from('import_logs')
+    .select('*', { count: 'exact', head: true });
+
+  if (startDate) {
+    ticketsQuery = ticketsQuery.gte('created_time', startDate);
+    logsQuery = logsQuery.gte('import_date', startDate);
+  }
+
+  if (endDate) {
+    ticketsQuery = ticketsQuery.lte('created_time', endDate);
+    logsQuery = logsQuery.lte('import_date', endDate);
+  }
+
+  const [ticketsResult, logsResult] = await Promise.all([
+    ticketsQuery,
+    logsQuery
+  ]);
+
+  return {
+    tickets: ticketsResult.count || 0,
+    logs: logsResult.count || 0
+  };
+};
+
 export const clearAllData = async (
+  params: ClearDatabaseParams,
   onProgress?: (progress: ClearDatabaseProgress) => void
 ): Promise<ClearDatabaseResult> => {
   if (!supabase) throw new Error("Supabase client not initialized");
@@ -936,16 +983,32 @@ export const clearAllData = async (
       });
     }
 
-    const { count: ticketsCount } = await supabase
+    let ticketsCountQuery = supabase
       .from('tickets')
       .select('*', { count: 'exact', head: true });
 
-    const { count: logsCount } = await supabase
+    let logsCountQuery = supabase
       .from('import_logs')
       .select('*', { count: 'exact', head: true });
 
-    const totalTickets = ticketsCount || 0;
-    const totalLogs = logsCount || 0;
+    if (!params.deleteAll) {
+      if (params.startDate) {
+        ticketsCountQuery = ticketsCountQuery.gte('created_time', params.startDate);
+        logsCountQuery = logsCountQuery.gte('import_date', params.startDate);
+      }
+      if (params.endDate) {
+        ticketsCountQuery = ticketsCountQuery.lte('created_time', params.endDate);
+        logsCountQuery = logsCountQuery.lte('import_date', params.endDate);
+      }
+    }
+
+    const [ticketsCountResult, logsCountResult] = await Promise.all([
+      ticketsCountQuery,
+      logsCountQuery
+    ]);
+
+    const totalTickets = ticketsCountResult.count || 0;
+    const totalLogs = logsCountResult.count || 0;
 
     if (onProgress) {
       onProgress({
@@ -956,10 +1019,22 @@ export const clearAllData = async (
       });
     }
 
-    const { error: logsError } = await supabase
+    let logsDeleteQuery = supabase
       .from('import_logs')
-      .delete()
-      .neq('id', 0);
+      .delete();
+
+    if (params.deleteAll) {
+      logsDeleteQuery = logsDeleteQuery.neq('id', 0);
+    } else {
+      if (params.startDate) {
+        logsDeleteQuery = logsDeleteQuery.gte('import_date', params.startDate);
+      }
+      if (params.endDate) {
+        logsDeleteQuery = logsDeleteQuery.lte('import_date', params.endDate);
+      }
+    }
+
+    const { error: logsError } = await logsDeleteQuery;
 
     if (logsError) throw logsError;
     deletedLogs = totalLogs;
@@ -974,10 +1049,22 @@ export const clearAllData = async (
       });
     }
 
-    const { error: ticketsError } = await supabase
+    let ticketsDeleteQuery = supabase
       .from('tickets')
-      .delete()
-      .neq('ticket_id', '');
+      .delete();
+
+    if (params.deleteAll) {
+      ticketsDeleteQuery = ticketsDeleteQuery.neq('ticket_id', '');
+    } else {
+      if (params.startDate) {
+        ticketsDeleteQuery = ticketsDeleteQuery.gte('created_time', params.startDate);
+      }
+      if (params.endDate) {
+        ticketsDeleteQuery = ticketsDeleteQuery.lte('created_time', params.endDate);
+      }
+    }
+
+    const { error: ticketsError } = await ticketsDeleteQuery;
 
     if (ticketsError) throw ticketsError;
     deletedTickets = totalTickets;
