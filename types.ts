@@ -16,6 +16,7 @@ export interface Ticket {
 
 export interface CsvRow {
   "IHS Ticket ID": string;
+  "SPXTN": string;
   "Driver": string;
   "PNR Order Value": string;
   "Status": string;

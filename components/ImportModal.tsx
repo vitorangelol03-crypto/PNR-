@@ -101,8 +101,9 @@ export const ImportModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) => 
             const id = row["IHS Ticket ID"];
             if (!id) return null;
 
-            return {
+            const ticket: Ticket = {
               ticket_id: id,
+              spxtn: row["SPXTN"] || '',
               driver_name: row["Driver"] || 'Não Informado',
               station: row["Station"] || '',
               pnr_value: parseCurrency(row["PNR Order Value"]),
@@ -111,6 +112,8 @@ export const ImportModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) => 
               internal_status: 'Pendente',
               internal_notes: ''
             };
+
+            return ticket;
           }).filter((t): t is Ticket => t !== null);
 
           const analysisResult = await analyzeImportData(ticketsFromCsv, (progress) => {
