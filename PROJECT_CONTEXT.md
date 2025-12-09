@@ -961,6 +961,100 @@ Sistema de gerenciamento logístico que permite visualizar dados através de um 
   - Sistema de importação totalmente estável
   - Pronto para produção
 
+### 2025-12-09 - Correção de Erros de Data Inválida e Lógica de Deduplicação
+- **Problemas Identificados**:
+  1. **Erro de formato de data inválido**:
+     - Erro: `date/time field value out of range` para múltiplas datas
+     - Causa: Datas do CSV em formato brasileiro (DD/MM/YYYY HH:mm) sendo passadas diretamente ao PostgreSQL
+     - PostgreSQL espera formato ISO: "YYYY-MM-DDTHH:MM:SSZ"
+     - Campo `sla_deadline` recebia string sem conversão: `row["SLA Deadline"]`
+
+  2. **Erro de chave duplicada**:
+     - Erro: `duplicate key value violates unique constraint "tickets_pkey"`
+     - Causa: Lógica de deduplicação quebrada usando `ticket.id` (ID interno inexistente no CSV)
+     - Deduplicação não funcionava, permitindo que registros existentes fossem classificados como "create"
+     - Sistema tentava INSERIR tickets que já existiam no banco
+     - Set de deduplicação com tipo incorreto: `Set<number>` ao invés de `Set<string>`
+
+- **Soluções Implementadas**:
+  1. **Função de Parsing de Data**:
+     - Criada função `parseDate(dateStr: string): string` em ImportModal.tsx
+     - Detecta formato brasileiro (DD/MM/YYYY HH:mm) usando regex
+     - Converte para formato ISO válido para PostgreSQL
+     - Tratamento de casos de datas inválidas ou vazias
+     - Fallback para data atual em caso de formato inválido
+     - Validação completa usando `Date.getTime()` para verificar validade
+
+  2. **Aplicação da Conversão de Data**:
+     - Modificado campo `sla_deadline` para usar `parseDate(row["SLA Deadline"])`
+     - Todas as datas agora convertidas para formato ISO antes de envio ao banco
+     - Formato final: "YYYY-MM-DDTHH:MM:SSZ"
+
+  3. **Correção da Lógica de Deduplicação**:
+     - Alterado tipo do Set: `Set<number>` → `Set<string>`
+     - Substituído uso de `ticket.id` por `ticket.ticket_id` em 2 locais
+     - Deduplicação agora usa a chave primária correta (ticket_id)
+     - Previne adição de tickets duplicados ao array de resultados
+     - Garante detecção correta de registros existentes vs. novos
+
+- **Arquivos Modificados**:
+  - `components/ImportModal.tsx`:
+    - Linhas 53-79: Criada função `parseDate()` para conversão de datas
+    - Linha 110: Aplicada conversão no campo `sla_deadline`
+
+  - `services/supabaseService.ts`:
+    - Linha 49: Alterado tipo do Set para `Set<string>`
+    - Linhas 82-86 (primeira ocorrência): Substituído `ticket.id` por `ticket.ticket_id`
+    - Linhas 120-124 (segunda ocorrência): Substituído `ticket.id` por `ticket.ticket_id`
+    - Ambas as mudanças aplicadas com `replace_all=true`
+
+- **Benefícios das Correções**:
+  - Datas brasileiras agora aceitas corretamente
+  - PostgreSQL recebe datas em formato válido
+  - Deduplicação funciona perfeitamente
+  - Registros existentes detectados e atualizados corretamente
+  - Novos registros criados apenas quando realmente novos
+  - Eliminação completa de erros 400 (Bad Request)
+  - Eliminação de erros de constraint de chave duplicada
+  - Sistema de importação totalmente estável
+
+- **Fluxo Corrigido**:
+  ```
+  CSV: "28/11/2025 23:59"
+  ↓
+  parseDate() → "2025-11-28T23:59:00Z"
+  ↓
+  PostgreSQL aceita ✓
+
+  Busca por tickets existentes
+  ↓
+  Deduplicação por ticket_id (chave primária)
+  ↓
+  Detecta registros existentes corretamente
+  ↓
+  UPDATE ao invés de INSERT duplicado ✓
+  ```
+
+- **Especificações Técnicas**:
+  - Regex de data: `/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})$/`
+  - Formato de saída: ISO 8601 (YYYY-MM-DDTHH:MM:SSZ)
+  - Deduplicação: O(1) usando Set<string> com ticket_id
+  - Fallback: Data atual em caso de formato inválido
+
+- **Motivo**: Corrigir erros críticos que impediam a importação de dados CSV: datas em formato brasileiro não eram convertidas para formato PostgreSQL e a lógica de deduplicação estava usando campo incorreto, causando tentativas de inserção de registros duplicados
+
+- **Status**: Concluído ✅
+
+- **Resultado**:
+  - Importação CSV funciona perfeitamente com datas brasileiras
+  - Formato de data convertido automaticamente
+  - Deduplicação funciona corretamente
+  - Registros existentes atualizados ao invés de duplicados
+  - Novos registros criados corretamente
+  - Sem erros 400 ou de constraint
+  - Build executado com sucesso (821.25 KB)
+  - Sistema totalmente estável e funcional
+
 ## Sessão de Chat Atual
 
 ### Solicitação do Usuário

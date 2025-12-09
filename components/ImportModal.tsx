@@ -50,6 +50,34 @@ export const ImportModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) => 
     return parseFloat(clean) || 0;
   };
 
+  const parseDate = (dateStr: string): string => {
+    if (!dateStr || !dateStr.trim()) {
+      return new Date().toISOString();
+    }
+
+    const trimmed = dateStr.trim();
+
+    const brDateRegex = /^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})$/;
+    const match = trimmed.match(brDateRegex);
+
+    if (match) {
+      const [_, day, month, year, hour, minute] = match;
+      const isoDate = `${year}-${month}-${day}T${hour}:${minute}:00Z`;
+      const date = new Date(isoDate);
+
+      if (!isNaN(date.getTime())) {
+        return date.toISOString();
+      }
+    }
+
+    const fallbackDate = new Date(trimmed);
+    if (!isNaN(fallbackDate.getTime())) {
+      return fallbackDate.toISOString();
+    }
+
+    return new Date().toISOString();
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -79,7 +107,7 @@ export const ImportModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) => 
               station: row["Station"] || '',
               pnr_value: parseCurrency(row["PNR Order Value"]),
               original_status: row["Status"] || 'Unknown',
-              sla_deadline: row["SLA Deadline"],
+              sla_deadline: parseDate(row["SLA Deadline"]),
               internal_status: 'Pendente',
               internal_notes: ''
             };

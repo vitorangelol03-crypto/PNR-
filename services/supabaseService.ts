@@ -46,7 +46,7 @@ const fetchTicketsInBatches = async (
   if (!supabase) throw new Error("Supabase client not initialized");
 
   let allTickets: Ticket[] = [];
-  const existingIds = new Set<number>();
+  const existingIds = new Set<string>();
 
   const totalIds = ticketIds.length + spxtns.length;
   let processedIds = 0;
@@ -79,9 +79,9 @@ const fetchTicketsInBatches = async (
 
       const batchTickets = (data as Ticket[]) || [];
       batchTickets.forEach(ticket => {
-        if (ticket.id && !existingIds.has(ticket.id)) {
+        if (ticket.ticket_id && !existingIds.has(ticket.ticket_id)) {
           allTickets.push(ticket);
-          existingIds.add(ticket.id);
+          existingIds.add(ticket.ticket_id);
         }
       });
 
@@ -118,9 +118,9 @@ const fetchTicketsInBatches = async (
 
       const batchTickets = (data as Ticket[]) || [];
       batchTickets.forEach(ticket => {
-        if (ticket.id && !existingIds.has(ticket.id)) {
+        if (ticket.ticket_id && !existingIds.has(ticket.ticket_id)) {
           allTickets.push(ticket);
-          existingIds.add(ticket.id);
+          existingIds.add(ticket.ticket_id);
         }
       });
 
