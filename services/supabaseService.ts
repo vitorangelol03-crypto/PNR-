@@ -160,6 +160,7 @@ interface FetchParams {
   filters?: ColumnFilters;
   sortBy?: 'sla_deadline' | 'internal_status_updated_at';
   sortOrder?: 'asc' | 'desc';
+  globalDriverFilter?: string;
 }
 
 export interface SearchResult {
@@ -174,16 +175,22 @@ export const fetchTicketsPaginated = async ({
   searchTerm,
   filters,
   sortBy = 'sla_deadline',
-  sortOrder = 'asc'
+  sortOrder = 'asc',
+  globalDriverFilter
 }: FetchParams): Promise<{ data: Ticket[], count: number, searchResult?: SearchResult }> => {
   if (!supabase) throw new Error("Supabase client not initialized");
-  
+
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
 
   let query = supabase
     .from('tickets')
     .select('*', { count: 'exact' });
+
+  // Apply global driver filter first (from charts filter)
+  if (globalDriverFilter && globalDriverFilter.trim() !== '') {
+    query = query.eq('driver_name', globalDriverFilter);
+  }
 
   let searchedCodes: string[] = [];
   let isMultiCodeSearch = false;

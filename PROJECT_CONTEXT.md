@@ -1436,6 +1436,98 @@ Sistema de gerenciamento logístico que permite visualizar dados através de um 
   - Build executado com sucesso (829.88 KB)
   - Sistema pronto para análise por motorista
 
+### 2025-12-09 - Integração do Filtro de Motorista com Tabela de Tickets
+- **Modificações**:
+  1. **Interface FetchParams no Serviço**:
+     - Adicionado parâmetro opcional `globalDriverFilter?: string`
+     - Permite passar filtro global de motorista separado dos filtros de coluna
+     - Mantém compatibilidade com código existente
+
+  2. **Função fetchTicketsPaginated**:
+     - Adicionado filtro global `.eq('driver_name', globalDriverFilter)` quando fornecido
+     - Aplicado ANTES dos outros filtros (busca global e filtros de coluna)
+     - Trabalha em conjunto com todos os filtros existentes
+     - Não interfere na lógica de pesquisa por códigos de rastreio
+
+  3. **Callback loadTableData no Dashboard**:
+     - Modificado para aceitar parâmetro `globalDriverFilter`
+     - Passa `selectedDriver || undefined` para a função de fetch
+     - Adicionado `selectedDriver` nas dependências do useCallback
+     - Tabela recarrega automaticamente quando motorista é selecionado/removido
+
+  4. **Badge de Filtro Ativo**:
+     - Criado componente visual acima da tabela quando filtro está ativo
+     - Fundo azul claro (bg-blue-50) com borda azul
+     - Mostra mensagem: "Filtrando por motorista: [Nome]"
+     - Indicador animado (pulsante) ao lado da mensagem
+     - Botão "Remover filtro" para limpar rapidamente
+     - Aparece apenas quando `selectedDriver` tem valor
+
+  5. **Sincronização Completa**:
+     - Quando usuário seleciona motorista nos gráficos:
+       - Gráficos atualizam (KPIs, Status, Top Motoristas)
+       - Tabela filtra automaticamente para mostrar apenas tickets daquele motorista
+     - Quando usuário clica "Limpar Filtros":
+       - Gráficos voltam a mostrar todos os dados
+       - Tabela volta a mostrar todos os tickets
+     - Badge visual indica claramente que filtro está ativo
+
+  6. **Interação com Filtros Existentes**:
+     - Filtro global de motorista trabalha EM CONJUNTO com:
+       - Filtro de período (últimos X dias / personalizado)
+       - Pesquisa global por código de rastreio
+       - Filtros de coluna individuais
+       - Ordenação (por prazo ou atualização)
+       - Paginação
+     - Todos os filtros são cumulativos (AND lógico)
+
+  7. **Comportamento da Paginação**:
+     - Contagem total reflete o filtro global
+     - Navegação entre páginas mantém filtro ativo
+     - Reset de filtro não afeta página atual
+
+- **Arquivos Modificados**:
+  - `services/supabaseService.ts`:
+    - Linhas 156-164: Interface `FetchParams` com novo parâmetro
+    - Linhas 172-193: Função `fetchTicketsPaginated` com lógica de filtro global
+  - `components/Dashboard.tsx`:
+    - Linhas 205-244: Callback `loadTableData` com selectedDriver
+    - Linhas 704-720: Badge visual de filtro ativo acima da tabela
+
+- **Funcionalidade**:
+  - Experiência totalmente integrada entre gráficos e tabela
+  - Usuário seleciona motorista e todo o dashboard reflete essa seleção
+  - Análise focada por motorista mais eficiente e intuitiva
+  - Menos cliques necessários para análise detalhada
+  - Feedback visual claro do estado atual dos filtros
+
+- **Especificações Técnicas**:
+  - Filtro aplicado: `.eq('driver_name', globalDriverFilter)`
+  - Prioridade: aplicado antes de outros filtros
+  - Compatibilidade: 100% com filtros existentes
+  - Performance: query otimizada com índice existente
+  - UI: badge condicional com animação CSS
+
+- **Benefícios**:
+  - Workflow mais rápido para análise por motorista
+  - Interface consistente e previsível
+  - Redução de passos manuais
+  - Experiência de usuário melhorada
+  - Sistema mais profissional e polido
+
+- **Motivo**: Integrar completamente o filtro de motorista dos gráficos com a tabela de tickets, proporcionando uma experiência unificada onde selecionar um motorista afeta toda a visualização de dados
+
+- **Status**: Concluído ✅
+
+- **Resultado**:
+  - Filtro de motorista agora afeta gráficos E tabela
+  - Badge visual indica claramente quando filtro está ativo
+  - Botão de remoção rápida disponível
+  - Todos os filtros trabalham harmoniosamente juntos
+  - Build executado com sucesso (830.53 KB)
+  - Sistema totalmente integrado e funcional
+  - Experiência de usuário premium implementada
+
 ### Solicitação do Usuário
 1. Responder sempre em português
 2. Criar arquivo de contexto (MD) para registrar tudo do chat e atualizações do projeto
@@ -1449,6 +1541,7 @@ Sistema de gerenciamento logístico que permite visualizar dados através de um 
    - Atualização ao invés de criação de novos registros
    - Feedback visual mostrando o que está sendo criado/atualizado
    - Sistema de LOG para rastrear histórico de importações
+8. Integrar filtro de motorista dos gráficos com tabela de tickets
 
 ### Status
 - ✅ Arquivo PROJECT_CONTEXT.md criado

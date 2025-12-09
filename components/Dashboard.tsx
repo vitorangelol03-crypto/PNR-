@@ -212,7 +212,8 @@ export const Dashboard: React.FC = () => {
         searchTerm: debouncedSearch,
         filters: debouncedColFilters,
         sortBy,
-        sortOrder
+        sortOrder,
+        globalDriverFilter: selectedDriver || undefined
       });
       setTickets(data);
       setTotalCount(count);
@@ -240,7 +241,7 @@ export const Dashboard: React.FC = () => {
       setLoadingTable(false);
       setLoading(false); // Initial load done
     }
-  }, [page, pageSize, debouncedSearch, debouncedColFilters, sortBy, sortOrder]);
+  }, [page, pageSize, debouncedSearch, debouncedColFilters, sortBy, sortOrder, selectedDriver]);
 
   // Initial Load
   useEffect(() => {
@@ -697,6 +698,24 @@ export const Dashboard: React.FC = () => {
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* Global Driver Filter Badge */}
+          {selectedDriver && (
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                <span className="text-sm font-medium text-blue-900">
+                  Filtrando por motorista: <span className="font-semibold">{selectedDriver}</span>
+                </span>
+              </div>
+              <button
+                onClick={() => setSelectedDriver('')}
+                className="text-blue-700 hover:text-blue-900 text-xs underline"
+              >
+                Remover filtro
+              </button>
             </div>
           )}
 
