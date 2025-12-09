@@ -96,3 +96,12 @@ export interface ImportAnalysis {
     toSkip: number;
   };
 }
+
+export interface BatchProgress {
+  currentBatch: number;
+  totalBatches: number;
+  processedItems: number;
+  totalItems: number;
+  stage: 'analyzing' | 'importing';
+  message: string;
+}

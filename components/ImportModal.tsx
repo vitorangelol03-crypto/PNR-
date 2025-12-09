@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Papa from 'papaparse';
 import { Upload, X, CheckCircle, AlertCircle, Loader2, ArrowLeft, FileText } from 'lucide-react';
-import { CsvRow, Ticket, ImportAnalysis, ImportResult } from '../types';
+import { CsvRow, Ticket, ImportAnalysis, ImportResult, BatchProgress } from '../types';
 import { analyzeImportData, executeSmartImport, saveImportLog } from '../services/supabaseService';
 import { ImportPreviewTable } from './ImportPreviewTable';
 
@@ -20,6 +20,7 @@ export const ImportModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) => 
   const [fileName, setFileName] = useState<string>('');
   const [analysis, setAnalysis] = useState<ImportAnalysis | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
+  const [progress, setProgress] = useState<BatchProgress | null>(null);
 
   if (!isOpen) return null;
 
@@ -30,6 +31,7 @@ export const ImportModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) => 
     setFileName('');
     setAnalysis(null);
     setResult(null);
+    setProgress(null);
   };
 
   const handleClose = () => {
@@ -83,8 +85,11 @@ export const ImportModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) => 
             };
           }).filter((t): t is Ticket => t !== null);
 
-          const analysisResult = await analyzeImportData(ticketsFromCsv);
+          const analysisResult = await analyzeImportData(ticketsFromCsv, (progress) => {
+            setProgress(progress);
+          });
           setAnalysis(analysisResult);
+          setProgress(null);
           setStep('preview');
         } catch (err: any) {
           console.error('Erro ao analisar importação:', err);
@@ -123,7 +128,11 @@ export const ImportModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) => 
         item => item.operation !== 'skip' || !item.error
       );
 
-      const importResult = await executeSmartImport(itemsToProcess);
+      const importResult = await executeSmartImport(itemsToProcess, (progress) => {
+        setProgress(progress);
+      });
+
+      setProgress(null);
 
       const logId = await saveImportLog(fileName, importResult, analysis.previews);
 
@@ -177,8 +186,26 @@ export const ImportModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) => 
 
       <div className="flex flex-col items-center justify-center py-12">
         <Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" />
-        <p className="text-gray-600 text-lg font-medium">Detectando duplicados...</p>
-        <p className="text-sm text-gray-500 mt-2">Isso pode levar alguns segundos</p>
+
+        {progress ? (
+          <>
+            <p className="text-gray-600 text-lg font-medium mb-2">{progress.message}</p>
+            <div className="w-full max-w-md bg-gray-200 rounded-full h-3 mb-2">
+              <div
+                className="bg-blue-600 h-3 rounded-full transition-all duration-300"
+                style={{ width: `${(progress.processedItems / progress.totalItems) * 100}%` }}
+              />
+            </div>
+            <p className="text-sm text-gray-500">
+              Processado {progress.processedItems} de {progress.totalItems} itens ({progress.currentBatch}/{progress.totalBatches} lotes)
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-gray-600 text-lg font-medium">Detectando duplicados...</p>
+            <p className="text-sm text-gray-500 mt-2">Isso pode levar alguns segundos</p>
+          </>
+        )}
       </div>
     </>
   );
@@ -281,8 +308,26 @@ export const ImportModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) => 
 
       <div className="flex flex-col items-center justify-center py-12">
         <Loader2 className="w-16 h-16 text-blue-600 animate-spin mb-4" />
-        <p className="text-gray-600 text-lg font-medium">Processando registros...</p>
-        <p className="text-sm text-gray-500 mt-2">Aguarde enquanto salvamos os dados</p>
+
+        {progress ? (
+          <>
+            <p className="text-gray-600 text-lg font-medium mb-2">{progress.message}</p>
+            <div className="w-full max-w-md bg-gray-200 rounded-full h-3 mb-2">
+              <div
+                className="bg-blue-600 h-3 rounded-full transition-all duration-300"
+                style={{ width: `${(progress.processedItems / progress.totalItems) * 100}%` }}
+              />
+            </div>
+            <p className="text-sm text-gray-500">
+              Processado {progress.processedItems} de {progress.totalItems} itens ({progress.currentBatch}/{progress.totalBatches} lotes)
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-gray-600 text-lg font-medium">Processando registros...</p>
+            <p className="text-sm text-gray-500 mt-2">Aguarde enquanto salvamos os dados</p>
+          </>
+        )}
       </div>
     </>
   );

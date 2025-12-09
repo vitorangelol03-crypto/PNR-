@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { SupabaseConfig, Ticket, KpiStats, ImportPreviewItem, ImportAnalysis, FieldChange, ImportResult, ImportLog } from '../types';
+import { SupabaseConfig, Ticket, KpiStats, ImportPreviewItem, ImportAnalysis, FieldChange, ImportResult, ImportLog, BatchProgress } from '../types';
 
 let supabase: SupabaseClient | null = null;
 
@@ -14,6 +14,110 @@ export const initSupabase = (config: SupabaseConfig) => {
 };
 
 export const getSupabase = () => supabase;
+
+// --- FUNÇÃO AUXILIAR: Dividir Array em Lotes ---
+const batchArray = <T>(array: T[], batchSize: number): T[][] => {
+  const batches: T[][] = [];
+  for (let i = 0; i < array.length; i += batchSize) {
+    batches.push(array.slice(i, i + batchSize));
+  }
+  return batches;
+};
+
+// --- FUNÇÃO AUXILIAR: Buscar Tickets em Lotes ---
+const fetchTicketsInBatches = async (
+  ticketIds: string[],
+  spxtns: string[],
+  batchSize: number = 200,
+  onProgress?: (progress: BatchProgress) => void
+): Promise<Ticket[]> => {
+  if (!supabase) throw new Error("Supabase client not initialized");
+
+  let allTickets: Ticket[] = [];
+  const existingIds = new Set<number>();
+
+  const totalIds = ticketIds.length + spxtns.length;
+  let processedIds = 0;
+
+  // Buscar por ticket_ids em lotes
+  if (ticketIds.length > 0) {
+    const ticketIdBatches = batchArray(ticketIds, batchSize);
+    const totalBatches = ticketIdBatches.length;
+
+    for (let i = 0; i < ticketIdBatches.length; i++) {
+      const batch = ticketIdBatches[i];
+
+      if (onProgress) {
+        onProgress({
+          currentBatch: i + 1,
+          totalBatches: totalBatches + (spxtns.length > 0 ? batchArray(spxtns, batchSize).length : 0),
+          processedItems: processedIds,
+          totalItems: totalIds,
+          stage: 'analyzing',
+          message: `Verificando tickets existentes (${i + 1}/${totalBatches})...`
+        });
+      }
+
+      const { data, error } = await supabase
+        .from('tickets')
+        .select('*')
+        .in('ticket_id', batch);
+
+      if (error) throw error;
+
+      const batchTickets = (data as Ticket[]) || [];
+      batchTickets.forEach(ticket => {
+        if (ticket.id && !existingIds.has(ticket.id)) {
+          allTickets.push(ticket);
+          existingIds.add(ticket.id);
+        }
+      });
+
+      processedIds += batch.length;
+    }
+  }
+
+  // Buscar por spxtns em lotes
+  if (spxtns.length > 0) {
+    const spxtnBatches = batchArray(spxtns, batchSize);
+    const totalBatches = spxtnBatches.length;
+    const offset = ticketIds.length > 0 ? batchArray(ticketIds, batchSize).length : 0;
+
+    for (let i = 0; i < spxtnBatches.length; i++) {
+      const batch = spxtnBatches[i];
+
+      if (onProgress) {
+        onProgress({
+          currentBatch: offset + i + 1,
+          totalBatches: offset + totalBatches,
+          processedItems: processedIds,
+          totalItems: totalIds,
+          stage: 'analyzing',
+          message: `Verificando códigos de rastreio (${i + 1}/${totalBatches})...`
+        });
+      }
+
+      const { data, error } = await supabase
+        .from('tickets')
+        .select('*')
+        .in('spxtn', batch);
+
+      if (error) throw error;
+
+      const batchTickets = (data as Ticket[]) || [];
+      batchTickets.forEach(ticket => {
+        if (ticket.id && !existingIds.has(ticket.id)) {
+          allTickets.push(ticket);
+          existingIds.add(ticket.id);
+        }
+      });
+
+      processedIds += batch.length;
+    }
+  }
+
+  return allTickets;
+};
 
 // --- FUNÇÃO UTILITÁRIA: Parse de Múltiplos Códigos de Rastreio ---
 export const parseTrackingCodes = (input: string): string[] => {
@@ -436,7 +540,10 @@ export const upsertTickets = async (tickets: Ticket[]) => {
   }
 };
 
-export const analyzeImportData = async (ticketsFromCsv: Ticket[]): Promise<ImportAnalysis> => {
+export const analyzeImportData = async (
+  ticketsFromCsv: Ticket[],
+  onProgress?: (progress: BatchProgress) => void
+): Promise<ImportAnalysis> => {
   if (!supabase) throw new Error("Supabase client not initialized");
 
   const ticketIds = ticketsFromCsv.map(t => t.ticket_id).filter(Boolean);
@@ -460,37 +567,8 @@ export const analyzeImportData = async (ticketsFromCsv: Ticket[]): Promise<Impor
     };
   }
 
-  let existingTickets: Ticket[] = [];
-
-  // Buscar por ticket_ids
-  if (ticketIds.length > 0) {
-    const { data, error } = await supabase
-      .from('tickets')
-      .select('*')
-      .in('ticket_id', ticketIds);
-
-    if (error) throw error;
-    existingTickets = (data as Ticket[]) || [];
-  }
-
-  // Buscar por spxtns (se houver)
-  if (spxtns.length > 0) {
-    const { data, error } = await supabase
-      .from('tickets')
-      .select('*')
-      .in('spxtn', spxtns);
-
-    if (error) throw error;
-
-    // Combinar resultados e remover duplicados
-    const spxtnTickets = (data as Ticket[]) || [];
-    const existingIds = new Set(existingTickets.map(t => t.id));
-    spxtnTickets.forEach(ticket => {
-      if (ticket.id && !existingIds.has(ticket.id)) {
-        existingTickets.push(ticket);
-      }
-    });
-  }
+  // Usar batching para buscar tickets existentes
+  const existingTickets = await fetchTicketsInBatches(ticketIds, spxtns, 200, onProgress);
 
   const existingMap = new Map<string, Ticket>();
   existingTickets.forEach(ticket => {
@@ -584,7 +662,10 @@ export const analyzeImportData = async (ticketsFromCsv: Ticket[]): Promise<Impor
   };
 };
 
-export const executeSmartImport = async (previewItems: ImportPreviewItem[]): Promise<ImportResult> => {
+export const executeSmartImport = async (
+  previewItems: ImportPreviewItem[],
+  onProgress?: (progress: BatchProgress) => void
+): Promise<ImportResult> => {
   if (!supabase) throw new Error("Supabase client not initialized");
 
   const toCreate = previewItems.filter(item => item.operation === 'create');
@@ -595,10 +676,27 @@ export const executeSmartImport = async (previewItems: ImportPreviewItem[]): Pro
   let updatedRecords = 0;
 
   const BATCH_SIZE = 100;
+  const totalBatches = Math.ceil(toCreate.length / BATCH_SIZE) + Math.ceil(toUpdate.length / BATCH_SIZE);
+  let currentBatch = 0;
 
   try {
-    for (let i = 0; i < toCreate.length; i += BATCH_SIZE) {
-      const batch = toCreate.slice(i, i + BATCH_SIZE);
+    // Processar criações em lotes
+    const createBatches = batchArray(toCreate, BATCH_SIZE);
+    for (let i = 0; i < createBatches.length; i++) {
+      currentBatch++;
+
+      if (onProgress) {
+        onProgress({
+          currentBatch,
+          totalBatches,
+          processedItems: newRecords + updatedRecords,
+          totalItems: toCreate.length + toUpdate.length,
+          stage: 'importing',
+          message: `Criando novos registros (${i + 1}/${createBatches.length})...`
+        });
+      }
+
+      const batch = createBatches[i];
       const ticketsToInsert = batch.map(item => item.ticket);
 
       const { error } = await supabase
@@ -612,31 +710,57 @@ export const executeSmartImport = async (previewItems: ImportPreviewItem[]): Pro
       }
     }
 
-    for (const item of toUpdate) {
-      if (!item.existingTicket) continue;
+    // Processar updates em lotes usando upsert
+    if (toUpdate.length > 0) {
+      const updateBatches = batchArray(toUpdate, BATCH_SIZE);
 
-      const updates: Partial<Ticket> = {
-        driver_name: item.ticket.driver_name,
-        station: item.ticket.station,
-        pnr_value: item.ticket.pnr_value,
-        original_status: item.ticket.original_status,
-        sla_deadline: item.ticket.sla_deadline,
-        updated_at: new Date().toISOString()
-      };
+      for (let i = 0; i < updateBatches.length; i++) {
+        currentBatch++;
 
-      if (item.ticket.spxtn && !item.existingTicket.spxtn) {
-        updates.spxtn = item.ticket.spxtn;
-      }
+        if (onProgress) {
+          onProgress({
+            currentBatch,
+            totalBatches,
+            processedItems: newRecords + updatedRecords,
+            totalItems: toCreate.length + toUpdate.length,
+            stage: 'importing',
+            message: `Atualizando registros existentes (${i + 1}/${updateBatches.length})...`
+          });
+        }
 
-      const { error } = await supabase
-        .from('tickets')
-        .update(updates)
-        .eq('ticket_id', item.existingTicket.ticket_id);
+        const batch = updateBatches[i];
+        const ticketsToUpdate = batch
+          .filter(item => item.existingTicket)
+          .map(item => {
+            const updates: Partial<Ticket> = {
+              ticket_id: item.existingTicket!.ticket_id,
+              driver_name: item.ticket.driver_name,
+              station: item.ticket.station,
+              pnr_value: item.ticket.pnr_value,
+              original_status: item.ticket.original_status,
+              sla_deadline: item.ticket.sla_deadline,
+              updated_at: new Date().toISOString(),
+              internal_status: item.existingTicket!.internal_status,
+              internal_notes: item.existingTicket!.internal_notes,
+              internal_status_updated_at: item.existingTicket!.internal_status_updated_at
+            };
 
-      if (error) {
-        errors.push(`Erro ao atualizar ${item.ticket.ticket_id}: ${error.message}`);
-      } else {
-        updatedRecords++;
+            if (item.ticket.spxtn && !item.existingTicket!.spxtn) {
+              updates.spxtn = item.ticket.spxtn;
+            }
+
+            return updates;
+          });
+
+        const { error } = await supabase
+          .from('tickets')
+          .upsert(ticketsToUpdate, { onConflict: 'ticket_id' });
+
+        if (error) {
+          errors.push(`Erro ao atualizar lote: ${error.message}`);
+        } else {
+          updatedRecords += batch.length;
+        }
       }
     }
 
