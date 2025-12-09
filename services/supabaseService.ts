@@ -24,6 +24,18 @@ const batchArray = <T>(array: T[], batchSize: number): T[][] => {
   return batches;
 };
 
+// --- FUNÇÃO AUXILIAR: Limpar Campos Undefined ---
+const cleanObject = <T extends Record<string, any>>(obj: T): Partial<T> => {
+  const cleaned: Partial<T> = {};
+  Object.keys(obj).forEach((key) => {
+    const value = obj[key];
+    if (value !== undefined) {
+      cleaned[key as keyof T] = value;
+    }
+  });
+  return cleaned;
+};
+
 // --- FUNÇÃO AUXILIAR: Buscar Tickets em Lotes ---
 const fetchTicketsInBatches = async (
   ticketIds: string[],
@@ -710,7 +722,7 @@ export const executeSmartImport = async (
       }
     }
 
-    // Processar updates em lotes usando upsert
+    // Processar updates individualmente
     if (toUpdate.length > 0) {
       const updateBatches = batchArray(toUpdate, BATCH_SIZE);
 
@@ -729,37 +741,41 @@ export const executeSmartImport = async (
         }
 
         const batch = updateBatches[i];
-        const ticketsToUpdate = batch
-          .filter(item => item.existingTicket)
-          .map(item => {
-            const updates: Partial<Ticket> = {
-              ticket_id: item.existingTicket!.ticket_id,
-              driver_name: item.ticket.driver_name,
-              station: item.ticket.station,
-              pnr_value: item.ticket.pnr_value,
-              original_status: item.ticket.original_status,
-              sla_deadline: item.ticket.sla_deadline,
-              updated_at: new Date().toISOString(),
-              internal_status: item.existingTicket!.internal_status,
-              internal_notes: item.existingTicket!.internal_notes,
-              internal_status_updated_at: item.existingTicket!.internal_status_updated_at
-            };
 
-            if (item.ticket.spxtn && !item.existingTicket!.spxtn) {
-              updates.spxtn = item.ticket.spxtn;
-            }
+        for (const item of batch) {
+          if (!item.existingTicket || !item.existingTicket.ticket_id) {
+            errors.push(`Erro ao atualizar: ticket_id não encontrado`);
+            continue;
+          }
 
-            return updates;
-          });
+          const updates: Partial<Ticket> = {
+            driver_name: item.ticket.driver_name,
+            station: item.ticket.station,
+            pnr_value: item.ticket.pnr_value,
+            original_status: item.ticket.original_status,
+            sla_deadline: item.ticket.sla_deadline,
+            updated_at: new Date().toISOString(),
+            internal_status: item.existingTicket.internal_status,
+            internal_notes: item.existingTicket.internal_notes,
+            internal_status_updated_at: item.existingTicket.internal_status_updated_at
+          };
 
-        const { error } = await supabase
-          .from('tickets')
-          .upsert(ticketsToUpdate, { onConflict: 'ticket_id' });
+          if (item.ticket.spxtn && !item.existingTicket.spxtn) {
+            updates.spxtn = item.ticket.spxtn;
+          }
 
-        if (error) {
-          errors.push(`Erro ao atualizar lote: ${error.message}`);
-        } else {
-          updatedRecords += batch.length;
+          const cleanedUpdates = cleanObject(updates);
+
+          const { error } = await supabase
+            .from('tickets')
+            .update(cleanedUpdates)
+            .eq('ticket_id', item.existingTicket.ticket_id);
+
+          if (error) {
+            errors.push(`Erro ao atualizar ticket ${item.existingTicket.ticket_id}: ${error.message}`);
+          } else {
+            updatedRecords++;
+          }
         }
       }
     }

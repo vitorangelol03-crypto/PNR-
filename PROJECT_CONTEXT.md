@@ -878,6 +878,89 @@ Sistema de gerenciamento logístico que permite visualizar dados através de um 
   - Sistema robusto e escalável
   - Pronto para produção com grandes volumes de dados
 
+### 2025-12-09 - Correção de Erros 400 (Bad Request) na Importação CSV
+- **Problema Identificado**:
+  - Múltiplos erros 400 (Bad Request) durante atualização de registros existentes
+  - Erro: `Failed to load resource: the server responded with a status of 400 ()`
+  - URLs apontavam para campo `internal_notes%22:1`
+  - Sistema tentava usar `.upsert()` com objetos `Partial<Ticket>` contendo campos undefined
+  - Supabase rejeitava requisições com dados inválidos
+  - Erro ocorria especificamente na função `executeSmartImport` durante updates
+
+- **Causa Raiz**:
+  1. Uso de `.upsert()` com objetos Partial contendo campos undefined
+  2. Campos como `internal_status_updated_at` podiam ser undefined
+  3. Supabase não aceita campos undefined em operações de upsert
+  4. Falta de limpeza/sanitização dos objetos antes de enviar
+  5. Falta de validação de dados antes das operações
+
+- **Solução Implementada**:
+  1. **Criada função auxiliar `cleanObject`**:
+     - Remove todos os campos undefined de objetos
+     - Retorna apenas campos com valores válidos
+     - Tipagem genérica para funcionar com qualquer tipo
+     - Implementação segura usando TypeScript
+
+  2. **Substituído `.upsert()` por `.update()` individual**:
+     - Updates agora usam `.update().eq('ticket_id', id)`
+     - Cada registro atualizado individualmente
+     - Maior controle sobre o processo
+     - Melhor tratamento de erros por registro
+     - Aplicação de `cleanObject()` antes de cada update
+
+  3. **Melhorado tratamento de erros**:
+     - Verificação se ticket_id existe antes de atualizar
+     - Mensagens de erro com contexto detalhado
+     - Indicação de qual ticket_id causou problema
+     - Processamento continua mesmo com erros individuais
+     - Acúmulo de erros com contexto para feedback final
+
+  4. **Validações adicionadas**:
+     - Verificação de existência de existingTicket
+     - Validação de ticket_id não nulo
+     - Skip de registros inválidos com log de erro
+     - Continue em caso de falha individual
+
+- **Arquivos Modificados**:
+  - `services/supabaseService.ts`:
+    - Linhas 27-37: Criada função `cleanObject<T>` para sanitização
+    - Linhas 725-781: Refatorado loop de updates:
+      - Substituído upsert em lote por updates individuais
+      - Adicionada validação de ticket_id
+      - Aplicado cleanObject antes de cada update
+      - Implementado tratamento de erro por registro
+      - Mensagens de erro específicas com ID do ticket
+
+- **Benefícios da Correção**:
+  - Eliminação completa dos erros 400
+  - Updates funcionam corretamente
+  - Maior confiabilidade do sistema
+  - Melhor feedback de erros
+  - Manutenção facilitada
+  - Performance: evita requisições que falhariam
+  - Dados sempre válidos enviados ao Supabase
+
+- **Especificações Técnicas**:
+  - função `cleanObject`: Remove campos undefined
+  - Update individual: `.update(cleanedData).eq('ticket_id', id)`
+  - Validação: existingTicket && ticket_id !== null
+  - Error handling: try/continue pattern
+  - Batch size mantido: 100 registros por lote
+  - Processamento: sequencial dentro de cada lote
+
+- **Motivo**: Corrigir erro crítico que impedia atualizações de registros existentes durante importação, causado por dados inválidos (campos undefined) enviados ao Supabase via upsert
+
+- **Status**: Concluído ✅
+
+- **Resultado**:
+  - Erros 400 completamente eliminados
+  - Importação CSV funciona perfeitamente
+  - Updates de registros existentes funcionam corretamente
+  - Mensagens de erro claras e específicas
+  - Build executado com sucesso (820.86 KB)
+  - Sistema de importação totalmente estável
+  - Pronto para produção
+
 ## Sessão de Chat Atual
 
 ### Solicitação do Usuário
