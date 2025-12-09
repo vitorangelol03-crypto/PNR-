@@ -31,7 +31,10 @@ Sistema de gerenciamento logístico que permite visualizar dados através de um 
 │   ├── Dashboard.tsx               # Dashboard principal com KPIs e tabela
 │   ├── ConnectionModal.tsx         # Modal de conexão com Supabase
 │   ├── ImportModal.tsx             # Modal de importação de dados CSV
-│   └── BulkStatusModal.tsx         # Modal de atualização em massa de status interno
+│   ├── BulkStatusModal.tsx         # Modal de atualização em massa de status interno
+│   ├── ImportHistoryModal.tsx      # Modal de histórico de importações
+│   ├── ImportPreviewTable.tsx      # Tabela de preview de importação
+│   └── ClearDatabaseModal.tsx      # Modal de zerar banco de dados
 └── /services
     └── supabaseService.ts          # Serviço de integração com Supabase
 ```
@@ -54,6 +57,7 @@ Sistema de gerenciamento logístico que permite visualizar dados através de um 
 - [x] Sistema de ordenação por prazo SLA ou por data de atualização
 - [x] Indicação visual de tickets "Não movimentados"
 - [x] Tabelas do banco de dados criadas e configuradas
+- [x] Botão de zerar banco de dados com confirmação de segurança
 
 ### Configuração Atual
 - **Supabase URL**: https://vjkjusmzvxdzdeogmqdx.supabase.co
@@ -1213,6 +1217,115 @@ Sistema de gerenciamento logístico que permite visualizar dados através de um 
   - Sistema de importação 100% funcional
   - Dados completos e íntegros
   - Build bem-sucedido e pronto para produção
+
+### 2025-12-09 - Implementação de Botão para Zerar Banco de Dados
+- **Modificações**:
+  1. **Nova Função no Serviço Supabase**:
+     - Criada função `clearAllData()` com callback de progresso
+     - Interface `ClearDatabaseProgress` para rastreamento em tempo real
+     - Interface `ClearDatabaseResult` para resultado final
+     - Fluxo em 4 etapas:
+       - counting: Conta registros existentes
+       - deleting_logs: Exclui histórico de importações
+       - deleting_tickets: Exclui todos os tickets
+       - completed: Finalização com estatísticas
+     - Retorna estatísticas completas (tickets e logs deletados)
+     - Tratamento robusto de erros com mensagens específicas
+
+  2. **Novo Componente: ClearDatabaseModal**:
+     - Modal de confirmação com múltiplas camadas de segurança
+     - Campo de texto para digitar "ZERAR" (confirmação obrigatória)
+     - Aviso destacado em vermelho: "ESTA AÇÃO NÃO PODE SER DESFEITA"
+     - Exibição de estatísticas antes da exclusão:
+       - Total de tickets que serão deletados
+       - Total de registros de histórico que serão deletados
+     - Feedback visual em tempo real durante processamento:
+       - Barra de progresso animada
+       - Mensagens específicas de cada etapa
+       - Percentual de conclusão
+     - Tela de sucesso com resumo:
+       - Quantidade de tickets deletados
+       - Quantidade de logs deletados
+       - Auto-fechamento após 2 segundos
+     - Estados de erro tratados com possibilidade de nova tentativa
+     - Botão desabilitado até confirmação válida
+     - Impossível fechar durante processamento
+
+  3. **Integração no Dashboard**:
+     - Adicionado botão "Zerar Banco" no header
+     - Posicionado após botão "Histórico"
+     - Cor vermelha (bg-red-600) para indicar ação destrutiva
+     - Ícone Trash2 do lucide-react
+     - Estado `isClearDbOpen` para controlar modal
+     - Callback `onSuccess` recarrega dados automaticamente:
+       - loadTableData() - recarrega tabela de tickets
+       - loadStats() - atualiza KPIs e gráficos
+
+  4. **Segurança e Validações**:
+     - Palavra "ZERAR" deve ser digitada EXATAMENTE (case-sensitive)
+     - Input automaticamente converte para maiúsculas
+     - Botão de confirmação desabilitado até validação
+     - Botão de cancelar disponível em todas as etapas (exceto durante processamento)
+     - Múltiplas confirmações visuais antes da execução
+     - Contadores de registros visíveis antes da exclusão
+     - Impossível executar por acidente
+
+  5. **Experiência do Usuário**:
+     - Fluxo claro e intuitivo
+     - Feedback em cada etapa
+     - Barra de progresso de 4 etapas (25%, 50%, 75%, 100%)
+     - Mensagens descritivas:
+       - "Contando registros..."
+       - "Excluindo X registros de histórico..."
+       - "Excluindo X tickets..."
+       - "Banco de dados zerado com sucesso!"
+     - Ícones contextuais (Trash2, AlertTriangle, Loader2, CheckCircle)
+     - Cores semânticas (vermelho para perigo, verde para sucesso)
+
+- **Arquivos Criados**:
+  - `components/ClearDatabaseModal.tsx` - Modal completo de confirmação e execução
+
+- **Arquivos Modificados**:
+  - `services/supabaseService.ts`:
+    - Linhas 895-997: Adicionadas interfaces e função clearAllData()
+    - 102 linhas de código novo
+  - `components/Dashboard.tsx`:
+    - Linha 7: Import do ClearDatabaseModal
+    - Linha 14: Import do ícone Trash2
+    - Linha 84: Adicionado estado isClearDbOpen
+    - Linhas 361-366: Adicionado botão "Zerar Banco" no header
+    - Linhas 883-887: Renderizado do ClearDatabaseModal
+
+- **Funcionalidade**:
+  - Permite zerar completamente o banco de dados quando necessário
+  - Útil para casos de:
+    - Banco muito cheio/lotado
+    - Limpeza para testes
+    - Reset completo do sistema
+    - Recomeçar do zero
+  - Processo seguro com múltiplas confirmações
+  - Não há como reverter após execução
+
+- **Especificações Técnicas**:
+  - Exclusão em duas etapas (logs primeiro, tickets depois)
+  - Query: `.delete().neq('id', 0)` para import_logs
+  - Query: `.delete().neq('ticket_id', '')` para tickets
+  - Callback de progresso opcional para feedback UI
+  - Retorno: { success, deletedTickets, deletedLogs, error? }
+  - Tratamento completo de erros com try/catch
+
+- **Motivo**: Fornecer aos usuários uma forma segura de limpar completamente o banco de dados quando necessário, especialmente quando o sistema está muito cheio ou precisa ser resetado
+
+- **Status**: Concluído ✅
+
+- **Resultado**:
+  - Botão "Zerar Banco" disponível no header do Dashboard
+  - Modal de confirmação com múltiplas camadas de segurança
+  - Processo transparente com feedback em tempo real
+  - Estatísticas completas antes e depois da operação
+  - Sistema robusto com tratamento de erros
+  - Build executado com sucesso (828.32 KB)
+  - Funcionalidade pronta para uso em produção
 
 ### Solicitação do Usuário
 1. Responder sempre em português

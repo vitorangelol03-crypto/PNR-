@@ -4,13 +4,14 @@ import { Ticket, KpiStats } from '../types';
 import { ImportModal } from './ImportModal';
 import { BulkStatusModal } from './BulkStatusModal';
 import { ImportHistoryModal } from './ImportHistoryModal';
+import { ClearDatabaseModal } from './ClearDatabaseModal';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend
 } from 'recharts';
 import {
   Truck, Search, Filter, AlertTriangle, Clock,
-  Upload, FileText, Loader2, ChevronLeft, ChevronRight, AlertCircle, X, CheckCircle, XCircle, RefreshCw, History
+  Upload, FileText, Loader2, ChevronLeft, ChevronRight, AlertCircle, X, CheckCircle, XCircle, RefreshCw, History, Trash2
 } from 'lucide-react';
 import { RealtimeChannel } from '@supabase/supabase-js';
 
@@ -80,6 +81,7 @@ export const Dashboard: React.FC = () => {
   const [isImportOpen, setImportOpen] = useState(false);
   const [isBulkStatusOpen, setBulkStatusOpen] = useState(false);
   const [isHistoryOpen, setHistoryOpen] = useState(false);
+  const [isClearDbOpen, setClearDbOpen] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   
@@ -355,6 +357,12 @@ export const Dashboard: React.FC = () => {
             className="flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition text-sm font-medium"
           >
             <History className="w-4 h-4" /> Histórico
+          </button>
+          <button
+            onClick={() => setClearDbOpen(true)}
+            className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition text-sm font-medium"
+          >
+            <Trash2 className="w-4 h-4" /> Zerar Banco
           </button>
         </div>
       </header>
@@ -870,6 +878,12 @@ export const Dashboard: React.FC = () => {
       <ImportHistoryModal
         isOpen={isHistoryOpen}
         onClose={() => setHistoryOpen(false)}
+      />
+
+      <ClearDatabaseModal
+        isOpen={isClearDbOpen}
+        onClose={() => setClearDbOpen(false)}
+        onSuccess={() => { loadTableData(); loadStats(); }}
       />
     </div>
   );

@@ -891,3 +891,107 @@ export const fetchImportLogs = async (page: number = 1, pageSize: number = 10): 
     count: count || 0
   };
 };
+
+export interface ClearDatabaseProgress {
+  stage: 'counting' | 'deleting_logs' | 'deleting_tickets' | 'completed';
+  message: string;
+  deletedLogs?: number;
+  deletedTickets?: number;
+  totalLogs?: number;
+  totalTickets?: number;
+}
+
+export interface ClearDatabaseResult {
+  success: boolean;
+  deletedTickets: number;
+  deletedLogs: number;
+  error?: string;
+}
+
+export const clearAllData = async (
+  onProgress?: (progress: ClearDatabaseProgress) => void
+): Promise<ClearDatabaseResult> => {
+  if (!supabase) throw new Error("Supabase client not initialized");
+
+  try {
+    let deletedTickets = 0;
+    let deletedLogs = 0;
+
+    if (onProgress) {
+      onProgress({
+        stage: 'counting',
+        message: 'Contando registros...'
+      });
+    }
+
+    const { count: ticketsCount } = await supabase
+      .from('tickets')
+      .select('*', { count: 'exact', head: true });
+
+    const { count: logsCount } = await supabase
+      .from('import_logs')
+      .select('*', { count: 'exact', head: true });
+
+    const totalTickets = ticketsCount || 0;
+    const totalLogs = logsCount || 0;
+
+    if (onProgress) {
+      onProgress({
+        stage: 'deleting_logs',
+        message: `Excluindo ${totalLogs} registros de histórico...`,
+        totalLogs,
+        totalTickets
+      });
+    }
+
+    const { error: logsError } = await supabase
+      .from('import_logs')
+      .delete()
+      .neq('id', 0);
+
+    if (logsError) throw logsError;
+    deletedLogs = totalLogs;
+
+    if (onProgress) {
+      onProgress({
+        stage: 'deleting_tickets',
+        message: `Excluindo ${totalTickets} tickets...`,
+        deletedLogs,
+        totalLogs,
+        totalTickets
+      });
+    }
+
+    const { error: ticketsError } = await supabase
+      .from('tickets')
+      .delete()
+      .neq('ticket_id', '');
+
+    if (ticketsError) throw ticketsError;
+    deletedTickets = totalTickets;
+
+    if (onProgress) {
+      onProgress({
+        stage: 'completed',
+        message: 'Banco de dados zerado com sucesso!',
+        deletedLogs,
+        deletedTickets,
+        totalLogs,
+        totalTickets
+      });
+    }
+
+    return {
+      success: true,
+      deletedTickets,
+      deletedLogs
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      deletedTickets: 0,
+      deletedLogs: 0,
+      error: error.message || 'Erro desconhecido ao limpar banco de dados'
+    };
+  }
+};
