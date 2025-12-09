@@ -597,7 +597,11 @@ export const analyzeImportData = async (
   let toUpdate = 0;
   let toSkip = 0;
 
-  ticketsFromCsv.forEach(newTicket => {
+  // Rastrear ticket_ids já processados no CSV para detectar duplicatas internas
+  const processedTicketIds = new Set<string>();
+  const processedSpxtns = new Set<string>();
+
+  ticketsFromCsv.forEach((newTicket, index) => {
     if (!newTicket.ticket_id) {
       previews.push({
         ticket: newTicket,
@@ -607,6 +611,36 @@ export const analyzeImportData = async (
       });
       toSkip++;
       return;
+    }
+
+    // Verificar duplicatas internas no CSV
+    if (processedTicketIds.has(newTicket.ticket_id)) {
+      previews.push({
+        ticket: newTicket,
+        operation: 'skip',
+        changes: [],
+        error: 'Ticket ID duplicado no arquivo CSV'
+      });
+      toSkip++;
+      return;
+    }
+
+    // Verificar duplicatas por spxtn no CSV
+    if (newTicket.spxtn && processedSpxtns.has(newTicket.spxtn)) {
+      previews.push({
+        ticket: newTicket,
+        operation: 'skip',
+        changes: [],
+        error: 'Código de rastreio duplicado no arquivo CSV'
+      });
+      toSkip++;
+      return;
+    }
+
+    // Marcar como processado
+    processedTicketIds.add(newTicket.ticket_id);
+    if (newTicket.spxtn) {
+      processedSpxtns.add(newTicket.spxtn);
     }
 
     const existing = existingMap.get(newTicket.ticket_id) ||
