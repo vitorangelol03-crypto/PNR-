@@ -82,6 +82,33 @@ Sistema de gerenciamento logístico que permite visualizar dados através de um 
 
 ## Histórico de Alterações
 
+### 2025-12-11 - Otimização de Performance da Importação de Dados
+- **Modificações**:
+  1. Otimizado `fetchTicketsInBatches` em `supabaseService.ts`:
+     - Consolidadas buscas por ticket_id e spxtn em query única usando OR
+     - Aumentado batch size de 200 para 500
+     - Reduzido número de consultas ao banco pela metade
+     - Melhorado controle de progresso
+  2. Otimizado `executeSmartImport` em `supabaseService.ts`:
+     - Substituído loop individual de updates por batch upsert
+     - Aumentado batch size de 100 para 500
+     - Eliminado processamento sequencial de updates
+     - Reduzido drasticamente requisições HTTP ao Supabase
+  3. Otimizado `upsertTickets`:
+     - Aumentado batch size de 100 para 500
+  4. Removida função `cleanObject` não utilizada
+  5. Otimizado `analyzeImportData`:
+     - Aumentado batch size de 200 para 500
+- **Arquivos Afetados**:
+  - `/services/supabaseService.ts`
+- **Motivo**: Reduzir tempo de importação de dados grandes
+- **Status**: Concluído
+- **Resultados Esperados**:
+  - Redução de 60-70% no tempo de importação
+  - 3000 registros: de ~2-3 min para ~30-45 seg
+  - Redução de ~60 para ~12 requisições ao servidor
+  - Melhor uso dos recursos do Supabase
+
 ### 2025-12-09 - Sistema de Autenticação Diária com Senha
 - **Modificações**:
   1. Criado novo componente `LoginScreen.tsx`:

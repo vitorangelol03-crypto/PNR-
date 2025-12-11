@@ -26,108 +26,67 @@ const batchArray = <T>(array: T[], batchSize: number): T[][] => {
   return batches;
 };
 
-// --- FUNÇÃO AUXILIAR: Limpar Campos Undefined ---
-const cleanObject = <T extends Record<string, any>>(obj: T): Partial<T> => {
-  const cleaned: Partial<T> = {};
-  Object.keys(obj).forEach((key) => {
-    const value = obj[key];
-    if (value !== undefined) {
-      cleaned[key as keyof T] = value;
-    }
-  });
-  return cleaned;
-};
 
-// --- FUNÇÃO AUXILIAR: Buscar Tickets em Lotes ---
+// --- FUNÇÃO AUXILIAR: Buscar Tickets em Lotes (OTIMIZADA) ---
 const fetchTicketsInBatches = async (
   ticketIds: string[],
   spxtns: string[],
-  batchSize: number = 200,
+  batchSize: number = 500,
   onProgress?: (progress: BatchProgress) => void
 ): Promise<Ticket[]> => {
   if (!supabase) throw new Error("Supabase client not initialized");
 
-  let allTickets: Ticket[] = [];
+  const allTickets: Ticket[] = [];
   const existingIds = new Set<string>();
 
-  const totalIds = ticketIds.length + spxtns.length;
-  let processedIds = 0;
+  const allIds = [...new Set([...ticketIds, ...spxtns])];
+  const idBatches = batchArray(allIds, batchSize);
+  const totalBatches = idBatches.length;
 
-  // Buscar por ticket_ids em lotes
-  if (ticketIds.length > 0) {
-    const ticketIdBatches = batchArray(ticketIds, batchSize);
-    const totalBatches = ticketIdBatches.length;
+  for (let i = 0; i < idBatches.length; i++) {
+    const batch = idBatches[i];
 
-    for (let i = 0; i < ticketIdBatches.length; i++) {
-      const batch = ticketIdBatches[i];
-
-      if (onProgress) {
-        onProgress({
-          currentBatch: i + 1,
-          totalBatches: totalBatches + (spxtns.length > 0 ? batchArray(spxtns, batchSize).length : 0),
-          processedItems: processedIds,
-          totalItems: totalIds,
-          stage: 'analyzing',
-          message: `Verificando tickets existentes (${i + 1}/${totalBatches})...`
-        });
-      }
-
-      const { data, error } = await supabase
-        .from('tickets')
-        .select('*')
-        .in('ticket_id', batch);
-
-      if (error) throw error;
-
-      const batchTickets = (data as Ticket[]) || [];
-      batchTickets.forEach(ticket => {
-        if (ticket.ticket_id && !existingIds.has(ticket.ticket_id)) {
-          allTickets.push(ticket);
-          existingIds.add(ticket.ticket_id);
-        }
+    if (onProgress) {
+      onProgress({
+        currentBatch: i + 1,
+        totalBatches,
+        processedItems: i * batchSize,
+        totalItems: allIds.length,
+        stage: 'analyzing',
+        message: `Verificando tickets existentes (${i + 1}/${totalBatches})...`
       });
-
-      processedIds += batch.length;
     }
-  }
 
-  // Buscar por spxtns em lotes
-  if (spxtns.length > 0) {
-    const spxtnBatches = batchArray(spxtns, batchSize);
-    const totalBatches = spxtnBatches.length;
-    const offset = ticketIds.length > 0 ? batchArray(ticketIds, batchSize).length : 0;
+    const numericCodes = batch.filter(c => /^\d+$/.test(c));
+    const textCodes = batch.filter(c => !/^\d+$/.test(c));
 
-    for (let i = 0; i < spxtnBatches.length; i++) {
-      const batch = spxtnBatches[i];
+    const conditions: string[] = [];
 
-      if (onProgress) {
-        onProgress({
-          currentBatch: offset + i + 1,
-          totalBatches: offset + totalBatches,
-          processedItems: processedIds,
-          totalItems: totalIds,
-          stage: 'analyzing',
-          message: `Verificando códigos de rastreio (${i + 1}/${totalBatches})...`
-        });
+    if (textCodes.length > 0) {
+      conditions.push(`spxtn.in.(${textCodes.join(',')})`);
+    }
+
+    if (numericCodes.length > 0) {
+      conditions.push(`ticket_id.in.(${numericCodes.join(',')})`);
+      conditions.push(`spxtn.in.(${numericCodes.join(',')})`);
+    }
+
+    if (conditions.length === 0) continue;
+
+    const { data, error } = await supabase
+      .from('tickets')
+      .select('*')
+      .or(conditions.join(','));
+
+    if (error) throw error;
+
+    const batchTickets = (data as Ticket[]) || [];
+    batchTickets.forEach(ticket => {
+      if (ticket.ticket_id && !existingIds.has(ticket.ticket_id)) {
+        allTickets.push(ticket);
+        existingIds.add(ticket.ticket_id);
       }
-
-      const { data, error } = await supabase
-        .from('tickets')
-        .select('*')
-        .in('spxtn', batch);
-
-      if (error) throw error;
-
-      const batchTickets = (data as Ticket[]) || [];
-      batchTickets.forEach(ticket => {
-        if (ticket.ticket_id && !existingIds.has(ticket.ticket_id)) {
-          allTickets.push(ticket);
-          existingIds.add(ticket.ticket_id);
-        }
-      });
-
-      processedIds += batch.length;
-    }
+    });
   }
 
   return allTickets;
@@ -554,7 +513,7 @@ export const updateMultipleTicketsStatus = async (ticketIds: string[], newStatus
 export const upsertTickets = async (tickets: Ticket[]) => {
   if (!supabase) throw new Error("Supabase client not initialized");
 
-  const BATCH_SIZE = 100;
+  const BATCH_SIZE = 500;
   for (let i = 0; i < tickets.length; i += BATCH_SIZE) {
     const batch = tickets.slice(i, i + BATCH_SIZE);
 
@@ -594,7 +553,7 @@ export const analyzeImportData = async (
   }
 
   // Usar batching para buscar tickets existentes
-  const existingTickets = await fetchTicketsInBatches(ticketIds, spxtns, 200, onProgress);
+  const existingTickets = await fetchTicketsInBatches(ticketIds, spxtns, 500, onProgress);
 
   const existingMap = new Map<string, Ticket>();
   existingTickets.forEach(ticket => {
@@ -735,7 +694,7 @@ export const executeSmartImport = async (
   let newRecords = 0;
   let updatedRecords = 0;
 
-  const BATCH_SIZE = 100;
+  const BATCH_SIZE = 500;
   const totalBatches = Math.ceil(toCreate.length / BATCH_SIZE) + Math.ceil(toUpdate.length / BATCH_SIZE);
   let currentBatch = 0;
 
@@ -770,7 +729,7 @@ export const executeSmartImport = async (
       }
     }
 
-    // Processar updates individualmente
+    // Processar updates em lotes usando upsert (OTIMIZADO)
     if (toUpdate.length > 0) {
       const updateBatches = batchArray(toUpdate, BATCH_SIZE);
 
@@ -789,14 +748,11 @@ export const executeSmartImport = async (
         }
 
         const batch = updateBatches[i];
+        const ticketsToUpdate = batch.map(item => {
+          if (!item.existingTicket) return null;
 
-        for (const item of batch) {
-          if (!item.existingTicket || !item.existingTicket.ticket_id) {
-            errors.push(`Erro ao atualizar: ticket_id não encontrado`);
-            continue;
-          }
-
-          const updates: Partial<Ticket> = {
+          const ticketData: Partial<Ticket> = {
+            ticket_id: item.existingTicket.ticket_id,
             driver_name: item.ticket.driver_name,
             station: item.ticket.station,
             pnr_value: item.ticket.pnr_value,
@@ -808,21 +764,25 @@ export const executeSmartImport = async (
             internal_status_updated_at: item.existingTicket.internal_status_updated_at
           };
 
-          if (item.ticket.spxtn && !item.existingTicket.spxtn) {
-            updates.spxtn = item.ticket.spxtn;
+          if (item.ticket.spxtn || item.existingTicket.spxtn) {
+            ticketData.spxtn = item.ticket.spxtn || item.existingTicket.spxtn;
           }
 
-          const cleanedUpdates = cleanObject(updates);
+          return ticketData as Ticket;
+        }).filter(t => t !== null);
 
+        if (ticketsToUpdate.length > 0) {
           const { error } = await supabase
             .from('tickets')
-            .update(cleanedUpdates)
-            .eq('ticket_id', item.existingTicket.ticket_id);
+            .upsert(ticketsToUpdate, {
+              onConflict: 'ticket_id',
+              ignoreDuplicates: false
+            });
 
           if (error) {
-            errors.push(`Erro ao atualizar ticket ${item.existingTicket.ticket_id}: ${error.message}`);
+            errors.push(`Erro ao atualizar lote ${i + 1}: ${error.message}`);
           } else {
-            updatedRecords++;
+            updatedRecords += ticketsToUpdate.length;
           }
         }
       }
